@@ -1,0 +1,15 @@
+[package]
+name = "khonsu"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arrow = { version = "55", default-features = false }
+crossbeam-epoch = "0.9"
+crossbeam-queue = "0.3"
+crossbeam-skiplist = "0.1"
+futures = { version = "0.3", features = ["executor"], optional = true } # Make executor optional
+thiserror = "1.0"
+
+[dev-dependencies]
+test-case = "3.3" # For parameterized tests
