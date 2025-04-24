@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::errors::Result;
 use crate::transaction::Transaction;
-use crate::TransactionIsolation;
+use crate::{ParticipantError, TransactionChanges, TransactionIsolation, TwoPhaseCommitParticipant};
 use crate::conflict::resolution::ConflictResolution;
 use crate::storage::Storage; // Import the Storage trait
 
@@ -55,4 +55,36 @@ impl Khonsu {
     }
 
     // TODO: Add methods for registering the TwoPhaseCommitParticipant trait if needed externally.
+}
+
+impl TwoPhaseCommitParticipant for Khonsu {
+    // Using u64 as a simple GlobalTransactionId for now.
+    type GlobalTransactionId = u64;
+
+    fn prepare_transaction(&self, global_tx_id: Self::GlobalTransactionId, changes: TransactionChanges) -> std::result::Result<bool, ParticipantError> {
+        // TODO: Implement prepare logic.
+        // This should involve validating the changes against the current state
+        // in the txn_buffer, similar to the first phase of local commit.
+        // Need to check for conflicts based on the isolation level.
+        // If prepared, the changes might need to be temporarily stored,
+        // associated with the global_tx_id, until commit or abort is called.
+        println!("Prepare transaction: {:?}", global_tx_id);
+        Err(ParticipantError::Other("Prepare not implemented yet".to_string()))
+    }
+
+    fn commit_transaction(&self, global_tx_id: Self::GlobalTransactionId) -> std::result::Result<(), ParticipantError> {
+        // TODO: Implement commit logic for a prepared transaction.
+        // This should atomically apply the changes that were prepared
+        // for this global_tx_id to the txn_buffer.
+        println!("Commit transaction: {:?}", global_tx_id);
+        Err(ParticipantError::Other("Commit not implemented yet".to_string()))
+    }
+
+    fn abort_transaction(&self, global_tx_id: Self::GlobalTransactionId) -> std::result::Result<(), ParticipantError> {
+        // TODO: Implement abort logic for a prepared transaction.
+        // This should discard any staged/prepared changes associated
+        // with this global_tx_id.
+        println!("Abort transaction: {:?}", global_tx_id);
+        Err(ParticipantError::Other("Abort not implemented yet".to_string()))
+    }
 }

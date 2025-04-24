@@ -62,36 +62,42 @@ pub fn detect_conflicts(
             // If this transaction is trying to write to a key that was modified by another
             // transaction concurrently.
             // Iterate through the write set and check the current version in the txn_buffer.
-            // If the current version is newer than the transaction's start version (which is implicitly
-            // the version of the data when it was read, or 0 if not read), it's a write-write conflict.
-            // This check is simplified here and assumes a basic version comparison is sufficient.
-            // A more accurate check might compare against the transaction's read version for that key,
-            // or the global state version at the transaction's start time.
+            // If the current version is newer than the version the transaction read for that key,
+            // or newer than the transaction's ID if the key was not read, it's a write-write conflict.
             for (key, _change) in write_set {
                  if let Some(current_value) = txn_buffer.get(key) {
-                    // This is a simplified check. A proper check needs to compare against
-                    // the version the transaction *saw* when it started or last read this key.
-                    // For now, just checking if the current version is non-zero and the key is in the write set.
-                    // This is NOT a correct write-write conflict detection for all cases.
-                    // TODO: Implement accurate Write-Write conflict detection.
-                    if current_value.version() > 0 { // Simplified check
-                         // Check if this key was also read by this transaction. If so, it's a Read-Write conflict already detected.
-                         if !read_set.contains_key(key) {
-                             conflicts.insert(key.clone(), ConflictType::WriteWrite);
-                         }
+                    // Get the version of the key as seen by this transaction.
+                    // If the key was read, use the version from the read set.
+                    // If the key was not read, use the transaction's ID as a proxy for its start version.
+                    let transaction_version_of_key = read_set.get(key).copied().unwrap_or(_transaction_id);
+
+                    if current_value.version() > transaction_version_of_key {
+                         // Data being written by this transaction was modified by another transaction
+                         // after this transaction read it (or started, if not read).
+                         conflicts.insert(key.clone(), ConflictType::WriteWrite);
                     }
+                 } else {
+                     // The key exists in the write set but not in the txn_buffer.
+                     // This could happen if the key was inserted by this transaction,
+                     // or if it was deleted by another transaction concurrently.
+                     // If it was deleted by another transaction, it's a Write-Delete conflict.
+                     // TODO: Add Write-Delete conflict type and detection if needed.
                  }
             }
 
 
             if isolation_level == TransactionIsolation::Serializable {
                 // Serializable: Additional checks for serializability anomalies.
-                // This is the most complex part and typically involves checking for cycles
-                // in a transaction dependency graph (e.g., using a commit-time validation algorithm).
-                // This requires tracking dependencies between transactions (who read what, who wrote what).
-                // A full Serializable implementation is a significant undertaking.
-                // TODO: Implement full Serializable validation (e.g., using a graph-based approach).
-                println!("TODO: Implement full Serializable validation checks.");
+                // This includes checking for Write-Read conflicts:
+                // If another transaction read data that this transaction is writing,
+                // and that other transaction committed after this one started.
+                // This requires tracking read sets of other active/recently committed transactions,
+                // which is complex and not directly supported by the current TxnBuffer structure.
+                // A full Serializable implementation typically involves a validation phase
+                // that checks for cycles in a dependency graph or uses a global lock/timestamp
+                // for commit ordering.
+                // TODO: Implement full Serializable validation, including Write-Read conflicts.
+                println!("TODO: Implement full Serializable validation checks, including Write-Read conflicts.");
             }
         }
     }

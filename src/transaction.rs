@@ -144,29 +144,64 @@ impl Transaction {
                     println!("Conflict detected for transaction {}. Resolution: Ignore. Filtered {} conflicting changes.", self.id, conflicts.len());
                 }
                 ConflictResolution::Replace => {
-                    // TODO: Implement Replace resolution:
-                    // If a conflict is detected, the transaction's changes should overwrite
-                    // the conflicting data in the txn_buffer. The current txn_buffer.insert
-                    // already replaces, but ensuring this is atomic for the entire set of
-                    // conflicting keys might require more sophisticated logic or reliance
-                    // on the underlying SkipMap's atomicity per key.
-                    println!("Conflict detected for transaction {}. Resolution: Replace. TODO: Ensure atomic replacement of conflicting data.", self.id);
-                    // For now, the current logic proceeds with applying changes using insert, which replaces,
-                    // but the atomicity guarantee for the entire transaction's changes is limited.
+                    // Replace resolution: If a conflict is detected, the transaction's changes
+                    // for the conflicting keys overwrite the existing data in the txn_buffer.
+                    // The application of changes in Phase 2 handles this by inserting/deleting
+                    // based on the write set, effectively replacing existing entries for the same key.
+                    println!("Conflict detected for transaction {}. Resolution: Replace. Conflicting changes will overwrite existing data.", self.id);
+                    // No specific action needed here; the logic in Phase 2 applies the replacements.
                 }
                 ConflictResolution::Append => {
-                    // TODO: Implement Append resolution:
-                    // If a conflict is detected, for the conflicting keys, the new data
-                    // from the write_set needs to be merged with the existing data in the txn_buffer.
-                    // This requires:
-                    // 1. Identifying conflicting keys (part of conflict detection).
-                    // 2. For each conflicting key, retrieve the current data from the txn_buffer.
-                    // 3. Retrieve the new data from the write_set.
-                    // 4. Use an Arrow utility function (e.g., `merge_record_batches`) to merge the current data and the new data.
-                    // 5. Update the write_set with the merged RecordBatch for this key.
-                    // 6. After processing all conflicting keys, proceed with applying the updated write_set.
-                    println!("Conflict detected for transaction {}. Resolution: Append. TODO: Implement data merging using Arrow utility functions.", self.id);
-                    // For now, the current logic proceeds with applying changes, which is incorrect for Append.
+                    // Append resolution: Merge new data with existing data for conflicting keys.
+                    println!("Conflict detected for transaction {}. Resolution: Append. Merging conflicting changes.", self.id);
+
+                    // Iterate through the conflicting keys and merge the data.
+                    // The merged data will replace the original entry in the write_set_to_apply
+                    // before being applied to the txn_buffer in Phase 2.
+                    let mut merged_changes: HashMap<String, Option<RecordBatch>> = HashMap::new();
+
+                    for (key, conflict_type) in &conflicts {
+                        // For Append resolution, we primarily care about conflicts on keys
+                        // where the transaction has a pending write/update (Some(RecordBatch)).
+                        if let Some(change) = write_set_to_apply.get(key) {
+                            if let Some(new_data) = change {
+                                // Retrieve the current data from the txn_buffer
+                                let current_data = self.txn_buffer.get(key);
+
+                                if let Some(existing_value) = current_data {
+                                    // Merge existing data with new data
+                                    // Assuming a key column named "id" for merging purposes.
+                                    // TODO: Make the key column name configurable or part of the schema.
+                                    let merged_record_batch = crate::arrow_utils::merge_record_batches(
+                                        existing_value.data(),
+                                        &HashMap::from([(key.clone(), Some(new_data.clone()))]), // Create a temporary write set for the single key
+                                        "id", // Assuming "id" is the key column name
+                                    )?;
+                                    merged_changes.insert(key.clone(), Some(merged_record_batch));
+                                } else {
+                                    // No existing data, this was an insertion that conflicted (e.g., with a delete by another transaction).
+                                    // For Append, if the key didn't exist, the insertion should likely still happen.
+                                    // Keep the new data from the write set.
+                                     merged_changes.insert(key.clone(), Some(new_data.clone()));
+                                }
+                            } else {
+                                // Conflict on a deletion. Append resolution on a deletion doesn't make sense.
+                                // This case should potentially be an error or ignored depending on semantics.
+                                println!("Conflict on deletion for key {}. Append resolution not applicable.", key);
+                                // Keep the deletion in the write set.
+                                merged_changes.insert(key.clone(), None);
+                            }
+                        } else {
+                            // Conflict on a key that was read but not written by this transaction.
+                            // This shouldn't typically trigger an Append resolution action on the write set.
+                            println!("Conflict on read-only key {}. No Append resolution action needed on write set.", key);
+                        }
+                    }
+
+                    // Replace the original entries in write_set_to_apply with the merged changes.
+                    for (key, merged_change) in merged_changes {
+                        write_set_to_apply.insert(key, merged_change);
+                    }
                 }
             }
         }
@@ -214,8 +249,10 @@ impl Transaction {
     }
 
     /// Aborts the transaction, discarding staged changes.
+    /// Dropping the Transaction struct automatically discards the staged changes
+    /// held in the `write_set`.
     pub fn rollback(self) {
-        // TODO: Implement rollback logic (simply dropping the struct is a good start).
         println!("Transaction {} rolled back", self.id);
+        // The `write_set` and `read_set` are dropped when `self` is dropped.
     }
 }
