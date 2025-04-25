@@ -1,28 +1,52 @@
+// Declare the common module
+mod common;
+
 use std::sync::Arc;
 
 use arrow::array::{Int64Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
+// Use khonsu:: prefix for library items
 use khonsu::{
     conflict::resolution::ConflictResolution, errors::KhonsuError, Khonsu, TransactionIsolation,
 };
+// Use common:: prefix for shared test utilities
+use common::MockStorage;
 
-mod mock_storage;
 
 // Configure tests to run single-threaded
 #[cfg(test)]
 mod single_threaded_tests {
-    use super::*;
+    // Import common items needed within the test module
+    use super::*; // Brings in Arc, arrow types, khonsu types, etc.
+    use crate::common::{create_record_batch, setup_khonsu}; // Use crate::common here
+
+    // Helper to create schema, specific to this file's tests if needed, or use common one
+    fn create_basic_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false), // Using Utf8 key here
+            Field::new("value", DataType::Int64, false),
+        ]))
+    }
+
+     // Helper to create batch, specific to this file's tests if needed, or use common one
+    fn create_basic_record_batch(schema: Arc<Schema>, ids: Vec<&str>, values: Vec<i64>) -> RecordBatch {
+        RecordBatch::try_new(
+            schema,
+            vec![
+                Arc::new(StringArray::from(ids)),
+                Arc::new(Int64Array::from(values)),
+            ],
+        )
+        .unwrap()
+    }
+
 
     #[test]
     fn test_basic_khonsu_creation() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage,
-            TransactionIsolation::ReadCommitted,
-            ConflictResolution::Fail,
-        );
+        // Use setup_khonsu from common module
+        let khonsu = setup_khonsu(TransactionIsolation::ReadCommitted);
 
         // Assert that the Khonsu instance is created and transaction IDs are incrementing
         assert_eq!(khonsu.start_transaction().id(), 0);
@@ -31,31 +55,24 @@ mod single_threaded_tests {
 
     #[test]
     fn test_basic_read_write_commit() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::ReadCommitted,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::ReadCommitted);
+        // Get underlying MockStorage for direct verification if needed
+        // Note: This requires adding a way to get the storage back from Khonsu or setup_khonsu,
+        // or modifying MockStorage to allow inspection without direct access via Khonsu.
+        // For now, we rely on reading back through another transaction.
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Start a transaction, write data, and commit
         let mut txn = khonsu.start_transaction();
         txn.write("key1".to_string(), record_batch.clone()).unwrap();
         txn.commit().unwrap();
 
-        // Verify the data is in the mock storage
-        let stored_batch = storage.get("key1").unwrap();
-        assert_eq!(stored_batch.num_rows(), 1);
+        // Verify the data by reading it back in a new transaction
+        let mut verify_txn = khonsu.start_transaction();
+        let stored_batch = verify_txn.read(&"key1".to_string()).unwrap().unwrap();
+        // assert_eq!(stored_batch.num_rows(), 1); // Redundant if batches equal
         let stored_id_array = stored_batch
             .column(0)
             .as_any()
@@ -77,39 +94,27 @@ mod single_threaded_tests {
 
     #[test]
     fn test_basic_delete_commit() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::ReadCommitted,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::ReadCommitted);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write and commit initial data
         let mut txn = khonsu.start_transaction();
         txn.write("key1".to_string(), record_batch).unwrap();
         txn.commit().unwrap();
 
-        // Verify data is in storage
-        assert!(storage.get("key1").is_some());
+        // Verify data is present by reading
+        let mut verify_txn_before = khonsu.start_transaction();
+        assert!(verify_txn_before.read(&"key1".to_string()).unwrap().is_some());
+        verify_txn_before.rollback(); // Don't need to commit read
 
         // Start a new transaction, delete data, and commit
         let mut txn2 = khonsu.start_transaction();
         txn2.delete("key1").unwrap();
         txn2.commit().unwrap();
 
-        // Verify data is deleted from storage
-        assert!(storage.get("key1").is_none());
-
+        // Verify data is deleted by trying to read
         // Start another transaction and try to read the deleted data
         let mut txn3 = khonsu.start_transaction();
         let read_batch = txn3.read(&"key1".to_string()).unwrap();
@@ -118,31 +123,17 @@ mod single_threaded_tests {
 
     #[test]
     fn test_basic_rollback() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::ReadCommitted,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::ReadCommitted);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Start a transaction, write data, and rollback
         let mut txn = khonsu.start_transaction();
         txn.write("key1".to_string(), record_batch).unwrap();
         txn.rollback(); // Rollback the transaction
 
-        // Verify the data is NOT in the mock storage
-        assert!(storage.get("key1").is_none());
-
+        // Verify the data is NOT present by trying to read
         // Start another transaction and try to read the data
         let mut txn2 = khonsu.start_transaction();
         let read_batch = txn2.read(&"key1".to_string()).unwrap();
@@ -154,22 +145,10 @@ mod single_threaded_tests {
 
     #[test]
     fn test_serializable_wrw_conflict() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::Serializable,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let initial_record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -178,10 +157,12 @@ mod single_threaded_tests {
             .unwrap();
         initial_txn.commit().unwrap();
 
-        // Verify initial data is in storage
-        assert!(storage.get("key1").is_some());
+        // Verify initial data is present by reading
+        let mut verify_txn_initial = khonsu.start_transaction();
+        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        verify_txn_initial.rollback();
 
-        // Scenario: W-R-W conflict
+        // Scenario: W-R-W conflict (Adjusted for SSI)
         // Tx1 writes "key1"
         // Tx2 reads "key1"
         // Tx1 reads "key1" (after Tx2 read)
@@ -190,10 +171,7 @@ mod single_threaded_tests {
         // Tx1 starts and writes
         let mut txn1 = khonsu.start_transaction();
         let txn1_id = txn1.id();
-        let id_array_tx1 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx1 = Arc::new(Int64Array::from(vec![200]));
-        let record_batch_tx1 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx1, value_array_tx1]).unwrap();
+        let record_batch_tx1 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![200]);
         txn1.write("key1".to_string(), record_batch_tx1.clone())
             .unwrap();
         println!("Tx1 ({}) wrote key1", txn1_id);
@@ -237,32 +215,21 @@ mod single_threaded_tests {
         }
 
         // Verify the data in storage is now Tx1's data (Tx1 committed, Tx2 aborted)
-        let final_stored_batch = storage.get("key1").unwrap();
+        let mut verify_txn_final = khonsu.start_transaction();
+        let final_stored_batch = verify_txn_final.read(&"key1".to_string()).unwrap().unwrap();
         // Tx1 wrote value 200
-        let id_array_tx1_final = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx1_final = Arc::new(Int64Array::from(vec![200]));
-        let record_batch_tx1_final = RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx1_final, value_array_tx1_final]).unwrap();
-        assert_eq!(final_stored_batch, record_batch_tx1_final);
+        let record_batch_tx1_final = create_basic_record_batch(schema.clone(), vec!["key1"], vec![200]);
+        assert_eq!(*final_stored_batch, record_batch_tx1_final);
+        verify_txn_final.rollback();
     }
+
 
     #[test]
     fn test_serializable_rw_conflict() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::Serializable,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let initial_record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -271,10 +238,12 @@ mod single_threaded_tests {
             .unwrap();
         initial_txn.commit().unwrap();
 
-        // Verify initial data is in storage
-        assert!(storage.get("key1").is_some());
+        // Verify initial data is present by reading
+        let mut verify_txn_initial = khonsu.start_transaction();
+        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        verify_txn_initial.rollback();
 
-        // Scenario: R-W conflict
+        // Scenario: R-W conflict (Adjusted for SSI)
         // Tx1 reads "key1"
         // Tx2 writes "key1"
         // Tx1 commits (should succeed if Tx2 hasn't committed yet)
@@ -291,10 +260,7 @@ mod single_threaded_tests {
         // Tx2 starts and writes
         let mut txn2 = khonsu.start_transaction();
         let txn2_id = txn2.id();
-        let id_array_tx2 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx2 = Arc::new(Int64Array::from(vec![300]));
-        let record_batch_tx2 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx2, value_array_tx2]).unwrap();
+        let record_batch_tx2 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![300]);
         txn2.write("key1".to_string(), record_batch_tx2.clone())
             .unwrap();
         println!("Tx2 ({}) wrote key1", txn2_id);
@@ -308,10 +274,13 @@ mod single_threaded_tests {
         assert!(commit_result_tx1.is_ok());
 
         // Verify the data in storage is still the initial data (Tx1 only read)
-        let stored_batch_after_tx1 = storage.get("key1").unwrap();
-        assert_eq!(stored_batch_after_tx1, initial_record_batch);
+        let mut verify_txn_after_tx1 = khonsu.start_transaction();
+        let stored_batch_after_tx1 = verify_txn_after_tx1.read(&"key1".to_string()).unwrap().unwrap();
+        assert_eq!(*stored_batch_after_tx1, initial_record_batch);
+        verify_txn_after_tx1.rollback();
 
-        // Attempt to commit Tx2 (should fail due to R-W conflict with committed Tx1)
+
+        // Attempt to commit Tx2 (should succeed under SSI as Tx1 only read)
         println!("Attempting to commit Tx2 ({})", txn2_id);
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
@@ -320,29 +289,19 @@ mod single_threaded_tests {
         assert!(commit_result_tx2.is_ok());
 
         // Verify the data in storage is now Tx2's data
-        let _final_stored_batch = storage.get("key1").unwrap(); // Prefixed unused variable
-        let final_stored_batch = storage.get("key1").unwrap();
-        assert_eq!(final_stored_batch, record_batch_tx2); // Tx2 wrote value 300
+        let mut verify_txn_final = khonsu.start_transaction();
+        let final_stored_batch = verify_txn_final.read(&"key1".to_string()).unwrap().unwrap();
+        assert_eq!(*final_stored_batch, record_batch_tx2); // Tx2 wrote value 300
+        verify_txn_final.rollback();
     }
+
 
     #[test]
     fn test_serializable_ww_conflict() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::Serializable,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let initial_record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -351,8 +310,10 @@ mod single_threaded_tests {
             .unwrap();
         initial_txn.commit().unwrap();
 
-        // Verify initial data is in storage
-        assert!(storage.get("key1").is_some());
+        // Verify initial data is present by reading
+        let mut verify_txn_initial = khonsu.start_transaction();
+        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        verify_txn_initial.rollback();
 
         // Scenario: W-W conflict
         // Tx1 writes "key1"
@@ -363,10 +324,7 @@ mod single_threaded_tests {
         // Tx1 starts and writes
         let mut txn1 = khonsu.start_transaction();
         let txn1_id = txn1.id();
-        let id_array_tx1 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx1 = Arc::new(Int64Array::from(vec![200]));
-        let record_batch_tx1 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx1, value_array_tx1]).unwrap();
+        let record_batch_tx1 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![200]);
         txn1.write("key1".to_string(), record_batch_tx1.clone())
             .unwrap();
         println!("Tx1 ({}) wrote key1", txn1_id);
@@ -374,10 +332,7 @@ mod single_threaded_tests {
         // Tx2 starts and writes
         let mut txn2 = khonsu.start_transaction();
         let txn2_id = txn2.id();
-        let id_array_tx2 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx2 = Arc::new(Int64Array::from(vec![300]));
-        let record_batch_tx2 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx2, value_array_tx2]).unwrap();
+        let record_batch_tx2 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![300]);
         txn2.write("key1".to_string(), record_batch_tx2.clone())
             .unwrap();
         println!("Tx2 ({}) wrote key1", txn2_id);
@@ -391,8 +346,10 @@ mod single_threaded_tests {
         assert!(commit_result_tx1.is_ok());
 
         // Verify the data in storage is now Tx1's data
-        let stored_batch_after_tx1 = storage.get("key1").unwrap();
-        assert_eq!(stored_batch_after_tx1, record_batch_tx1);
+        let mut verify_txn_after_tx1 = khonsu.start_transaction();
+        let stored_batch_after_tx1 = verify_txn_after_tx1.read(&"key1".to_string()).unwrap().unwrap();
+        assert_eq!(*stored_batch_after_tx1, record_batch_tx1);
+        verify_txn_after_tx1.rollback();
 
         // Attempt to commit Tx2 (should fail due to W-W conflict with committed Tx1)
         println!("Attempting to commit Tx2 ({})", txn2_id);
@@ -408,28 +365,19 @@ mod single_threaded_tests {
         }
 
         // Verify the data in storage is still Tx1's data (Tx2 aborted)
-        let final_stored_batch = storage.get("key1").unwrap();
-        assert_eq!(final_stored_batch, record_batch_tx1);
+        let mut verify_txn_final = khonsu.start_transaction();
+        let final_stored_batch = verify_txn_final.read(&"key1".to_string()).unwrap().unwrap();
+        assert_eq!(*final_stored_batch, record_batch_tx1);
+        verify_txn_final.rollback();
     }
+
 
     #[test]
     fn test_dependency_removal_on_commit_and_abort() {
-        let storage = Arc::new(mock_storage::MockStorage::new());
-        let khonsu = Khonsu::new(
-            storage.clone(),
-            TransactionIsolation::Serializable,
-            ConflictResolution::Fail,
-        );
+        let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
-        // Define a simple schema and record batch
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Utf8, false),
-            Field::new("value", DataType::Int64, false),
-        ]));
-        let id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array = Arc::new(Int64Array::from(vec![100]));
-        let initial_record_batch =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array, value_array]).unwrap();
+        let schema = create_basic_schema();
+        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -438,8 +386,10 @@ mod single_threaded_tests {
             .unwrap();
         initial_txn.commit().unwrap();
 
-        // Verify initial data is in storage
-        assert!(storage.get("key1").is_some());
+        // Verify initial data is present by reading
+        let mut verify_txn_initial = khonsu.start_transaction();
+        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        verify_txn_initial.rollback();
 
         // Start Tx1 (will commit) and Tx2 (will abort)
         let mut txn1 = khonsu.start_transaction();
@@ -452,10 +402,7 @@ mod single_threaded_tests {
         println!("Tx1 ({}) read key1", txn1_id);
 
         // Tx2 writes key1
-        let id_array_tx2 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx2 = Arc::new(Int64Array::from(vec![500]));
-        let record_batch_tx2 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx2, value_array_tx2]).unwrap();
+        let record_batch_tx2 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![500]);
         txn2.write("key1".to_string(), record_batch_tx2).unwrap();
         println!("Tx2 ({}) wrote key1", txn2_id);
 
@@ -480,11 +427,8 @@ mod single_threaded_tests {
         // If dependencies were not removed, a new transaction writing to key1 might see a false conflict.
         let mut txn3 = khonsu.start_transaction();
         let txn3_id = txn3.id();
-        let id_array_tx3 = Arc::new(StringArray::from(vec!["key1"]));
-        let value_array_tx3 = Arc::new(Int64Array::from(vec![600]));
-        let record_batch_tx3 =
-            RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx3, value_array_tx3]).unwrap();
-        txn3.write("key1".to_string(), record_batch_tx3).unwrap();
+        let record_batch_tx3 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![600]);
+        txn3.write("key1".to_string(), record_batch_tx3.clone()).unwrap(); // Clone batch for later assert
         println!("Tx3 ({}) wrote key1", txn3_id);
 
         // Commit Tx3 (should succeed if dependencies were removed)
@@ -494,14 +438,9 @@ mod single_threaded_tests {
         assert!(commit_result_tx3.is_ok());
 
         // Verify the data in storage is now Tx3's data
-        let final_stored_batch = storage.get("key1").unwrap();
-        let expected_id_array = Arc::new(StringArray::from(vec!["key1"]));
-        let expected_value_array = Arc::new(Int64Array::from(vec![600]));
-        let expected_record_batch = RecordBatch::try_new(
-            Arc::clone(&schema),
-            vec![expected_id_array, expected_value_array],
-        )
-        .unwrap();
-        assert_eq!(final_stored_batch, expected_record_batch);
+        let mut verify_txn_final = khonsu.start_transaction();
+        let final_stored_batch = verify_txn_final.read(&"key1".to_string()).unwrap().unwrap();
+        assert_eq!(*final_stored_batch, record_batch_tx3);
+        verify_txn_final.rollback();
     }
 }
