@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use arrow::record_batch::RecordBatch;
+use std::sync::Arc;
 
 /// Represents a data value with an associated version/timestamp.
 #[derive(Debug, Clone, PartialEq)]

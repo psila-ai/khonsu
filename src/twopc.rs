@@ -26,15 +26,25 @@ pub trait TwoPhaseCommitParticipant: Send + Sync {
     /// The participant validates the changes locally and ensures they can be applied.
     /// Returns `Ok(true)` if prepared, `Ok(false)` if cannot prepare (e.g., local conflict),
     /// or an error if a fundamental issue occurred.
-    fn prepare_transaction(&self, global_tx_id: Self::GlobalTransactionId, changes: TransactionChanges) -> std::result::Result<bool, ParticipantError>;
+    fn prepare_transaction(
+        &self,
+        global_tx_id: Self::GlobalTransactionId,
+        changes: TransactionChanges,
+    ) -> std::result::Result<bool, ParticipantError>;
 
     /// Phase 2: Commit the prepared transaction.
     /// The participant atomically applies the changes that were previously prepared.
-    fn commit_transaction(&self, global_tx_id: Self::GlobalTransactionId) -> std::result::Result<(), ParticipantError>;
+    fn commit_transaction(
+        &self,
+        global_tx_id: Self::GlobalTransactionId,
+    ) -> std::result::Result<(), ParticipantError>;
 
     /// Phase 2: Abort the prepared transaction.
     /// The participant discards the staged changes for the given transaction.
-    fn abort_transaction(&self, global_tx_id: Self::GlobalTransactionId) -> std::result::Result<(), ParticipantError>;
+    fn abort_transaction(
+        &self,
+        global_tx_id: Self::GlobalTransactionId,
+    ) -> std::result::Result<(), ParticipantError>;
 
     // Potentially methods for querying state or handling recovery
     // fn get_state(&self) -> State;

@@ -1,5 +1,5 @@
-use arrow::record_batch::RecordBatch;
-use crate::errors::Result; // Assuming errors module is at crate root
+use crate::errors::Result;
+use arrow::record_batch::RecordBatch; // Assuming errors module is at crate root
 
 /// The key type for data items in the store. Using String for now.
 type DataKey = String;

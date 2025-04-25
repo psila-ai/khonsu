@@ -1,16 +1,16 @@
-use std::collections::HashMap;
+use ahash::AHashMap as HashMap;
+use arrow::record_batch::RecordBatch;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use arrow::record_batch::RecordBatch;
 
+use crate::conflict::detection::detect_conflicts;
+use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::data_store::versioned_value::VersionedValue;
-use crate::errors::{Result, Error};
-use crate::TransactionIsolation;
-use crate::conflict::resolution::ConflictResolution;
-use crate::conflict::detection::detect_conflicts;
+use crate::dependency_tracking::{DataItem, DependencyTracker};
+use crate::errors::{Error, Result};
 use crate::storage::{Storage, StorageMutation};
-use crate::dependency_tracking::{DependencyTracker, DataItem};
+use crate::TransactionIsolation;
 
 /// Represents a single transaction.
 pub struct Transaction {
@@ -93,13 +93,14 @@ impl Transaction {
             }
             TransactionIsolation::RepeatableRead | TransactionIsolation::Serializable => {
                 // RepeatableRead/Serializable: Read from the transaction buffer if not in write set. Record the version.
-                 if let Some(value) = versioned_value {
+                if let Some(value) = versioned_value {
                     // Record the read and its version
                     self.read_set.insert(key.to_string(), value.version());
                     // For Serializable, record a read operation for dependency tracking.
                     if self.isolation_level == TransactionIsolation::Serializable {
                         let data_item = DataItem { key: key.clone() }; // Create DataItem
-                        self.dependency_tracker.record_read(self.id, data_item, value.version());
+                        self.dependency_tracker
+                            .record_read(self.id, data_item, value.version());
                     }
                     Ok(Some(value.data().clone()))
                 } else {
@@ -126,50 +127,31 @@ impl Transaction {
     }
 
     /// Attempts to commit the transaction.
-    pub fn commit(mut self) -> Result<()> { // Added mut to self
+    pub fn commit(mut self) -> Result<()> {
+        // Added mut to self
         // Phase 1: Validation and Conflict Detection
         // Acquire a commit timestamp. Note: This should ideally be done *after* validation
         // in optimistic concurrency control, but for basic structure, we'll get it here.
         let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
 
-        // For Serializable isolation, record write dependencies and check for cycles.
+        // For Serializable isolation, record write dependencies before conflict detection.
         if self.isolation_level == TransactionIsolation::Serializable {
             // Record write dependencies with the commit timestamp as the write version.
             for key in self.write_set.keys() {
                 let data_item = DataItem { key: key.clone() };
-                self.dependency_tracker.record_write(self.id, data_item, commit_timestamp);
-            }
-
-            // Check for cycles in the dependency graph.
-            match self.dependency_tracker.check_for_cycles(self.id) {
-                Ok(true) => {
-                    // No cycle detected, proceed with commit.
-                    println!("Serializable validation successful for transaction {}", self.id);
-                }
-                Ok(false) => {
-                    // Cycle detected, serializability violation. Abort the transaction.
-                    println!("Serializable validation failed for transaction {}: Cycle detected.", self.id);
-                    // Remove the transaction's dependencies from the tracker as it's aborting.
-                    self.dependency_tracker.remove_transaction_dependencies(self.id);
-                    return Err(Error::TransactionConflict);
-                }
-                Err(e) => {
-                    // An error occurred during cycle detection.
-                    println!("Error during serializable validation for transaction {}: {:?}", self.id, e);
-                    // Remove the transaction's dependencies from the tracker due to error.
-                    self.dependency_tracker.remove_transaction_dependencies(self.id);
-                    return Err(e);
-                }
+                self.dependency_tracker
+                    .record_write(self.id, data_item, commit_timestamp);
             }
         }
 
-        // Perform conflict detection (still needed for other isolation levels and as a first pass for Serializable)
+        // Perform conflict detection, which now includes serializability validation for Serializable transactions.
         let conflicts = detect_conflicts(
             self.id,
             self.isolation_level,
             &self.read_set,
             &self.write_set, // Pass the actual write set
             &self.txn_buffer,
+            &self.dependency_tracker, // Pass the dependency tracker
         )?;
 
         let write_set_to_apply = &mut self.write_set; // Work with a mutable reference
@@ -214,16 +196,17 @@ impl Transaction {
                                     // Merge existing data with new data
                                     // Assuming a key column named "id" for merging purposes.
                                     // TODO: Make the key column name configurable or part of the schema.
-                                    let merged_record_batch = crate::arrow_utils::merge_record_batches(
-                                        existing_value.data(),
-                                        &HashMap::from([(key.clone(), Some(new_data.clone()))]), // Create a temporary write set for the single key
-                                        "id", // Assuming "id" is the key column name
-                                    )?;
+                                    let merged_record_batch =
+                                        crate::arrow_utils::merge_record_batches(
+                                            existing_value.data(),
+                                            &HashMap::from([(key.clone(), Some(new_data.clone()))]), // Create a temporary write set for the single key
+                                            "id", // Assuming "id" is the key column name
+                                        )?;
                                     merged_changes.insert(key.clone(), Some(merged_record_batch));
                                 } else {
                                     // No existing data, this was an insertion that conflicted (e.g., with a delete by another transaction).
                                     // For Append, if the key didn't exist, the insertion should likely still happen.
-                                     merged_changes.insert(key.clone(), Some(new_data.clone()));
+                                    merged_changes.insert(key.clone(), Some(new_data.clone()));
                                 }
                             } else {
                                 // Conflict on a deletion. Append resolution on a deletion doesn't make sense.
@@ -257,34 +240,35 @@ impl Transaction {
         // compare-and-swap loop on a pointer to the root of the data structure,
         // or a log-based approach.
         // For this implementation using SkipMap directly, we iterate and apply.
-        // This is a simplification and might not guarantee atomicity of the *entire*
-        // transaction's changes in the face of concurrent commits without further mechanisms.
+        // With parking_lot::RwLock, the insert and delete operations on the TxnBuffer
+        // are protected by the internal lock. Applying the entire write_set
+        // is done by iterating and calling these methods.
 
         let mut mutations_to_persist: Vec<StorageMutation> = Vec::new();
 
-        for (key, change) in write_set_to_apply.drain() { // Iterate over the mutable reference and drain
+        for (key, change) in write_set_to_apply.drain() {
+            // Iterate over the mutable reference and drain
             match change {
                 Some(record_batch) => {
                     // Insert or update the value in the transaction buffer
-                    let versioned_value = VersionedValue::new(Arc::new(record_batch.clone()), commit_timestamp);
-                    self.txn_buffer.insert(key.clone(), versioned_value);
-                    // Memory reclamation for the old value is handled within txn_buffer.insert
+                    let versioned_value =
+                        VersionedValue::new(Arc::new(record_batch.clone()), commit_timestamp);
+                    self.txn_buffer.insert(key.clone(), versioned_value); // Use TxnBuffer's insert method
+                                                                          // Memory reclamation for the old value is handled within txn_buffer.insert
                     mutations_to_persist.push(StorageMutation::Insert(key, record_batch));
                 }
                 None => {
                     // Delete the value from the transaction buffer
-                    self.txn_buffer.delete(&key.clone()); // Explicitly clone and pass &String
-                    // Memory reclamation for the deleted value is handled within txn_buffer.delete
+                    self.txn_buffer.delete(&key.clone()); // Use TxnBuffer's delete method
+                                                          // Memory reclamation for the deleted value is handled within txn_buffer.delete
                     mutations_to_persist.push(StorageMutation::Delete(key));
                 }
             }
         }
 
-
         // Call the Storage trait to persist changes.
         // This should happen after the in-memory state is updated.
         self.storage.apply_mutations(mutations_to_persist)?;
-
 
         Ok(()) // Placeholder for successful commit
     }

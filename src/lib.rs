@@ -1,24 +1,23 @@
-pub mod errors;
+pub mod arrow_utils;
+pub mod conflict;
 pub mod data_store;
-pub mod transaction;
+pub mod dependency_tracking;
+pub mod errors;
 pub mod khonsu;
 pub mod storage;
-pub mod twopc;
-pub mod conflict;
-pub mod arrow_utils;
-pub mod dependency_tracking; // Declare the new module
+pub mod transaction;
+pub mod twopc; // Declare the new module
 
 // Re-export key types and structs for easier access
-pub use errors::{Error, Result};
+pub use conflict::resolution::ConflictResolution;
 pub use data_store::txn_buffer::TxnBuffer;
 pub use data_store::versioned_value::VersionedValue;
+pub use dependency_tracking::DataItem;
+pub use errors::{Error, Result};
 pub use khonsu::Khonsu;
-pub use transaction::Transaction;
 pub use storage::Storage;
-pub use twopc::{TwoPhaseCommitParticipant, TransactionChanges, ParticipantError};
-pub use conflict::resolution::ConflictResolution;
-pub use dependency_tracking::DataItem; // Re-export DataItem
-
+pub use transaction::Transaction;
+pub use twopc::{ParticipantError, TransactionChanges, TwoPhaseCommitParticipant}; // Re-export DataItem
 
 // Define the TransactionIsolation enum here as it's a core part of the public API
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

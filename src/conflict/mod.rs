@@ -1,2 +1,2 @@
-pub mod resolution;
 pub mod detection;
+pub mod resolution;

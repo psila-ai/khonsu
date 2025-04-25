@@ -1,4 +1,4 @@
-.PHONY: w b test
+.PHONY: w b test stest
 
 define DEBUGBUILDNOTIF
     ____       __                   ____        _ __    __
@@ -18,3 +18,6 @@ b:
 
 test:
 	cargo test
+
+stest:
+	cargo test -- --test-threads=1

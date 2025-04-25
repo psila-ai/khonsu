@@ -1,8 +1,11 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
+use ahash::AHashMap as HashMap;
 use arrow::record_batch::RecordBatch;
+use std::sync::Mutex;
 
-use khonsu::{storage::{Storage, StorageMutation}, errors::Result}; // Assuming khonsu is the crate name
+use khonsu::{
+    errors::Result,
+    storage::{Storage, StorageMutation},
+}; // Assuming khonsu is the crate name
 
 /// A mock implementation of the `Storage` trait for testing purposes.
 /// Stores records in an in-memory HashMap.
