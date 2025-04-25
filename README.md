@@ -1,6 +1,15 @@
-# Khonsu: Software Transactional Memory for Rust
+<h1 align="center">
+    <img src="https://github.com/Jet-Engine/khonsu/raw/master/art/khonsu.jpg"/>
+</h1>
+<div align="center">
+ <strong>
+   Khonsu: Software Transactional Memory for Rust
+ </strong>
+<hr>
+</div>
 
-![Khonsu Logo](art/khonsu.jpg)
+<div align="center">
+</div>
 
 A high-performance Software Transactional Memory (STM) library for Rust, designed for concurrent data access and manipulation using Arrow RecordBatches.
 
@@ -96,4 +105,4 @@ cargo test -- --test-threads=1
 
 ## License
 
-ALL rights reserved.
+All rights reserved.
