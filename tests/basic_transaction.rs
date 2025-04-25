@@ -214,30 +214,35 @@ mod single_threaded_tests {
         // With the current implementation, it should read its own write from the write_set.
         assert_eq!(*read_batch_tx1, record_batch_tx1);
 
-        // Attempt to commit Tx1 (should fail)
+        // Attempt to commit Tx1 (should succeed under SSI as no dangerous RW structure exists yet)
         println!("Attempting to commit Tx1 ({})", txn1_id);
         let commit_result_tx1 = txn1.commit();
         println!("Tx1 commit result: {:?}", commit_result_tx1);
 
-        // Verify Tx1 commit failed with TransactionConflict
-        assert!(commit_result_tx1.is_err());
-        if let Err(Error::TransactionConflict) = commit_result_tx1 {
-            println!("Tx1 correctly failed with TransactionConflict");
-        } else {
-            panic!("Tx1 failed with unexpected result: {:?}", commit_result_tx1);
-        }
+        // Verify Tx1 commit succeeded
+        assert!(commit_result_tx1.is_ok());
 
-        // Commit Tx2 (should succeed as Tx1 aborted)
+        // Commit Tx2 (should succeed as Tx1 committed successfully)
         println!("Attempting to commit Tx2 ({})", txn2_id);
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
 
         // Verify Tx2 commit succeeded
-        assert!(commit_result_tx2.is_ok());
+        // Verify Tx2 commit failed (due to backward validation conflict with committed Tx1)
+        assert!(commit_result_tx2.is_err());
+        if let Err(Error::TransactionConflict) = commit_result_tx2 {
+             println!("Tx2 correctly failed with TransactionConflict (SSI Backward Validation)");
+        } else {
+             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
+        }
 
-        // Verify the data in storage is still the initial data (Tx1 aborted, Tx2 only read)
+        // Verify the data in storage is now Tx1's data (Tx1 committed, Tx2 aborted)
         let final_stored_batch = storage.get("key1").unwrap();
-        assert_eq!(final_stored_batch, initial_record_batch);
+        // Tx1 wrote value 200
+        let id_array_tx1_final = Arc::new(StringArray::from(vec!["key1"]));
+        let value_array_tx1_final = Arc::new(Int64Array::from(vec![200]));
+        let record_batch_tx1_final = RecordBatch::try_new(Arc::clone(&schema), vec![id_array_tx1_final, value_array_tx1_final]).unwrap();
+        assert_eq!(final_stored_batch, record_batch_tx1_final);
     }
 
     #[test]
@@ -311,10 +316,10 @@ mod single_threaded_tests {
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
 
-        // Verify Tx2 commit failed with TransactionConflict
+        // Verify Tx2 commit failed with TransactionConflict (SSI Backward or standard OCC should catch this)
         assert!(commit_result_tx2.is_err());
         if let Err(Error::TransactionConflict) = commit_result_tx2 {
-            println!("Tx2 correctly failed with TransactionConflict");
+            println!("Tx2 correctly failed with TransactionConflict (RW conflict with committed Tx1)");
         } else {
             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
@@ -398,10 +403,10 @@ mod single_threaded_tests {
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
 
-        // Verify Tx2 commit failed with TransactionConflict
+        // Verify Tx2 commit failed with TransactionConflict (SSI Backward or standard OCC should catch this)
         assert!(commit_result_tx2.is_err());
         if let Err(Error::TransactionConflict) = commit_result_tx2 {
-            println!("Tx2 correctly failed with TransactionConflict");
+            println!("Tx2 correctly failed with TransactionConflict (WW conflict with committed Tx1)");
         } else {
             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
@@ -458,16 +463,11 @@ mod single_threaded_tests {
         txn2.write("key1".to_string(), record_batch_tx2).unwrap();
         println!("Tx2 ({}) wrote key1", txn2_id);
 
-        // Commit Tx1 (should fail)
+        // Commit Tx1 (should succeed under SSI as no dangerous RW structure exists yet)
         println!("Attempting to commit Tx1 ({})", txn1_id);
         let commit_result_tx1 = txn1.commit();
         println!("Tx1 commit result: {:?}", commit_result_tx1);
-        assert!(commit_result_tx1.is_err());
-        if let Err(Error::TransactionConflict) = commit_result_tx1 {
-            println!("Tx1 correctly failed with TransactionConflict");
-        } else {
-            panic!("Tx1 failed with unexpected result: {:?}", commit_result_tx1);
-        }
+        assert!(commit_result_tx1.is_ok()); // Expect Tx1 to succeed
 
         // Abort Tx2
         println!("Attempting to abort Tx2 ({})", txn2_id);
