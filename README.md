@@ -96,4 +96,4 @@ cargo test -- --test-threads=1
 
 ## License
 
-[TODO: Add license information]
+ALL rights reserved.
