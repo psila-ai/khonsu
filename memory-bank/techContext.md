@@ -26,6 +26,8 @@
 - `crossbeam-queue`: For lock-free queues (`SegQueue`) used internally.
 - `futures`: If an executor is needed, the `executor` feature will be used.
 - `std::sync::atomic`: For atomic operations.
+- **Concurrent Data Structures:** Utilizing concurrent data structures (like `crossbeam-skiplist`) for dependency tracking to ensure thread safety without traditional locks.
+- **Concurrent Algorithms:** Implementing concurrent algorithms for tasks like cycle detection in the transaction dependency graph.
 
 ## Tool Usage Patterns
 

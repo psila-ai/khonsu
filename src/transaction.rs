@@ -111,16 +111,9 @@ impl Transaction {
 
     /// Stages a write operation for a key with the provided RecordBatch.
     pub fn write(&mut self, key: String, record_batch: RecordBatch) -> Result<()> {
-        // For Serializable, record a write operation for dependency tracking.
-        if self.isolation_level == TransactionIsolation::Serializable {
-            let data_item = DataItem { key: key.clone() }; // Create DataItem
-            // Need the version of the data being written. This is the commit timestamp,
-            // which is not available yet. We'll record the write and associate it
-            // with the commit timestamp later during the commit process.
-            // For now, just record that this transaction intends to write to this key.
-            self.dependency_tracker.record_write(self.id, data_item);
-        }
         // Stage the write/update in the write set.
+        // For Serializable, dependency tracking for writes will be recorded during commit
+        // when the commit timestamp (write version) is available.
         self.write_set.insert(key, Some(record_batch));
         Ok(())
     }
@@ -139,7 +132,38 @@ impl Transaction {
         // in optimistic concurrency control, but for basic structure, we'll get it here.
         let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
 
-        // Perform conflict detection
+        // For Serializable isolation, record write dependencies and check for cycles.
+        if self.isolation_level == TransactionIsolation::Serializable {
+            // Record write dependencies with the commit timestamp as the write version.
+            for key in self.write_set.keys() {
+                let data_item = DataItem { key: key.clone() };
+                self.dependency_tracker.record_write(self.id, data_item, commit_timestamp);
+            }
+
+            // Check for cycles in the dependency graph.
+            match self.dependency_tracker.check_for_cycles(self.id) {
+                Ok(true) => {
+                    // No cycle detected, proceed with commit.
+                    println!("Serializable validation successful for transaction {}", self.id);
+                }
+                Ok(false) => {
+                    // Cycle detected, serializability violation. Abort the transaction.
+                    println!("Serializable validation failed for transaction {}: Cycle detected.", self.id);
+                    // Remove the transaction's dependencies from the tracker as it's aborting.
+                    self.dependency_tracker.remove_transaction_dependencies(self.id);
+                    return Err(Error::TransactionConflict);
+                }
+                Err(e) => {
+                    // An error occurred during cycle detection.
+                    println!("Error during serializable validation for transaction {}: {:?}", self.id, e);
+                    // Remove the transaction's dependencies from the tracker due to error.
+                    self.dependency_tracker.remove_transaction_dependencies(self.id);
+                    return Err(e);
+                }
+            }
+        }
+
+        // Perform conflict detection (still needed for other isolation levels and as a first pass for Serializable)
         let conflicts = detect_conflicts(
             self.id,
             self.isolation_level,
@@ -199,7 +223,6 @@ impl Transaction {
                                 } else {
                                     // No existing data, this was an insertion that conflicted (e.g., with a delete by another transaction).
                                     // For Append, if the key didn't exist, the insertion should likely still happen.
-                                    // Keep the new data from the write set.
                                      merged_changes.insert(key.clone(), Some(new_data.clone()));
                                 }
                             } else {

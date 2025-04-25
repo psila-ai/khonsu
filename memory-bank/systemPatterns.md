@@ -12,6 +12,7 @@ The system will follow a typical STM architecture. There will be a shared, globa
 - **Conflict Detection:** During commit, compare the read and written data versions of the committing transaction against the current state in the Transaction Buffer (TxnBuffer) to identify conflicts with other concurrently committed transactions.
 - **Conflict Resolution:** Implement the specified strategies (append, ignore, replace, fail) based on the type of conflict and configuration.
 - **Rollback:** Design the transaction mechanism to easily discard staged changes and revert to the state before the transaction began. This is simplified by operating on private copies/views.
+- **Transaction Dependency Tracking:** Implement a mechanism to track read and write dependencies between transactions. This is essential for enforcing Serializable isolation and involves using a `DependencyTracker` to record which transactions read or wrote which data items.
 
 ## Component Relationships
 
