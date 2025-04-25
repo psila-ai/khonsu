@@ -1,3 +1,4 @@
+use log::debug;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -89,7 +90,7 @@ impl TwoPhaseCommitParticipant for Khonsu {
         // Need to check for conflicts based on the isolation level.
         // If prepared, the changes might need to be temporarily stored,
         // associated with the global_tx_id, until commit or abort is called.
-        println!("Prepare transaction: {:?}", global_tx_id);
+        debug!("Prepare transaction: {:?}", global_tx_id);
         Err(ParticipantError::Other(
             "Prepare not implemented yet".to_string(),
         ))
@@ -102,7 +103,7 @@ impl TwoPhaseCommitParticipant for Khonsu {
         // TODO: Implement commit logic for a prepared transaction.
         // This should atomically apply the changes that were prepared
         // for this global_tx_id to the txn_buffer.
-        println!("Commit transaction: {:?}", global_tx_id);
+        debug!("Commit transaction: {:?}", global_tx_id);
         Err(ParticipantError::Other(
             "Commit not implemented yet".to_string(),
         ))
@@ -115,7 +116,7 @@ impl TwoPhaseCommitParticipant for Khonsu {
         // TODO: Implement abort logic for a prepared transaction.
         // This should discard any staged/prepared changes associated
         // with this global_tx_id.
-        println!("Abort transaction: {:?}", global_tx_id);
+        debug!("Abort transaction: {:?}", global_tx_id);
         Err(ParticipantError::Other(
             "Abort not implemented yet".to_string(),
         ))

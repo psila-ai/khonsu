@@ -3,7 +3,7 @@ use arrow::array::*;
 use arrow::datatypes::*;
 use arrow::record_batch::RecordBatch;
 
-use crate::errors::{Error, Result}; // Assuming errors module is at crate root
+use crate::errors::{KhonsuError, Result}; // Assuming errors module is at crate root
 
 /// Merges changes from a write set (insertions, updates, deletions) into a target RecordBatch.
 ///
@@ -24,7 +24,7 @@ pub fn merge_record_batches(
         .schema()
         .column_with_name(key_column_name)
         .ok_or_else(|| {
-            Error::ArrowError(format!(
+            KhonsuError::ArrowError(format!(
                 "Key column '{}' not found in target RecordBatch",
                 key_column_name
             ))
@@ -35,15 +35,14 @@ pub fn merge_record_batches(
         .as_any()
         .downcast_ref::<StringArray>()
         .ok_or_else(|| {
-            Error::ArrowError(format!(
+            KhonsuError::ArrowError(format!(
                 "Key column '{}' is not a StringArray in target",
                 key_column_name
             ))
         })?;
 
     // Build a set of existing keys in the target for efficient lookup
-    let existing_target_keys: HashSet<&str> =
-        target_key_array.iter().filter_map(|key| key).collect();
+    let existing_target_keys: HashSet<&str> = target_key_array.iter().flatten().collect();
 
     for (key, change) in write_set {
         match change {
@@ -123,7 +122,7 @@ pub fn merge_record_batches(
     for (_, insertion_batch) in insertions {
         // Ensure schema compatibility (basic check)
         if insertion_batch.schema() != target_schema {
-            return Err(Error::ArrowError(
+            return Err(KhonsuError::ArrowError(
                 "Schema mismatch between target and insertion RecordBatch".to_string(),
             ));
         }
@@ -148,8 +147,10 @@ pub fn merge_record_batches(
         .map(|mut builder| builder.finish())
         .collect();
 
-    let result_record_batch = RecordBatch::try_new(target_schema.clone(), final_arrays)
-        .map_err(|e| Error::ArrowError(format!("Failed to create result RecordBatch: {}", e)))?;
+    let result_record_batch =
+        RecordBatch::try_new(target_schema.clone(), final_arrays).map_err(|e| {
+            KhonsuError::ArrowError(format!("Failed to create result RecordBatch: {}", e))
+        })?;
 
     Ok(result_record_batch)
 }
@@ -179,13 +180,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<StringBuilder>() // Use StringBuilder
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast builder to StringBuilder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to StringBuilder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<StringArray>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast source array to StringArray".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to StringArray".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -196,13 +201,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<Int64Builder>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast builder to Int64Builder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to Int64Builder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<Int64Array>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast source array to Int64Array".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to Int64Array".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -214,13 +223,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<Float64Builder>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast builder to Float64Builder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to Float64Builder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<Float64Array>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast source array to Float64Array".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to Float64Array".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -232,13 +245,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<BooleanBuilder>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast builder to BooleanBuilder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to BooleanBuilder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<BooleanArray>()
                 .ok_or_else(|| {
-                    Error::ArrowError("Failed to downcast source array to BooleanArray".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to BooleanArray".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -246,7 +263,7 @@ fn append_value(
         }
         // TODO: Add support for other Arrow Data Types
         _ => {
-            return Err(Error::ArrowError(format!(
+            return Err(KhonsuError::ArrowError(format!(
                 "Unsupported Arrow Data Type for appending: {:?}",
                 data_type
             )))

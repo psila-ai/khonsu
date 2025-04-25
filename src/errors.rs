@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum Error {
+pub enum KhonsuError {
     #[error("Transaction conflict detected")]
     TransactionConflict,
 
@@ -18,4 +18,4 @@ pub enum Error {
     Other(String),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, KhonsuError>;

@@ -1,117 +1,89 @@
-use ahash::AHashMap as HashMap; // Removed unused HashSet import
-use arrow::record_batch::RecordBatch;
-use std::sync::Arc; // Added Arc import
-
 use crate::data_store::txn_buffer::TxnBuffer;
-use crate::dependency_tracking::DependencyTracker;
 use crate::errors::*;
-use crate::TransactionIsolation; // Added DependencyTracker import
+use crate::TransactionIsolation;
+use ahash::AHashMap as HashMap;
+use arrow::record_batch::RecordBatch;
+use log::debug;
 
-/// Represents the type of conflict detected.
-#[derive(Debug, PartialEq, Eq)]
+/// Represents the type of conflict detected (against committed versions).
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ConflictType {
-    /// The transaction read data that was modified by another transaction.
-    ReadWrite,
-    /// The transaction attempted to write to data that was modified by another transaction.
-    WriteWrite,
-    /// The transaction read data that was deleted by another transaction.
-    ReadDelete,
-    /// The transaction attempted to write to data that was deleted by another transaction.
-    WriteDelete,
-    // TODO: Add other conflict types if necessary.
+    /// The transaction read data that was modified by another committed transaction.
+    CommittedReadWrite,
+    /// The transaction attempted to write to data that was modified by another committed transaction.
+    CommittedWriteWrite,
+    /// The transaction read data that was deleted by another committed transaction.
+    CommittedReadDelete,
+    /// The transaction attempted to write to data that was deleted by another committed transaction.
+    CommittedWriteDelete, // Keep for potential future use
 }
 
 /// Checks for conflicts between a transaction's read/write sets and the transaction buffer.
-///
-/// This function implements optimistic concurrency control validation and returns
-/// a map of conflicting keys and the type of conflict.
+/// Implements OCC validation against committed versions for ReadCommitted and RepeatableRead.
 pub fn detect_conflicts(
-    _transaction_id: u64, // Transaction ID might be useful for logging/debugging
+    committing_tx_id: u64, // Represents the transaction's logical start time for OCC
     isolation_level: TransactionIsolation,
     read_set: &HashMap<String, u64>,
     write_set: &HashMap<String, Option<RecordBatch>>,
     txn_buffer: &TxnBuffer,
-    dependency_tracker: &Arc<DependencyTracker>, // Removed underscore, parameter will be used
+    // _dependency_tracker: &Arc<DependencyTracker>, // Parameter no longer needed
 ) -> Result<HashMap<String, ConflictType>> {
     let mut conflicts: HashMap<String, ConflictType> = HashMap::new();
 
+    // --- OCC Checks against Committed Versions ---
+
     match isolation_level {
         TransactionIsolation::ReadCommitted => {
-            // ReadCommitted: No read validation needed for reads.
-            // Explicit Write-Write conflict detection for ReadCommitted.
-            // This is primarily for logging or if specific resolution strategies
-            // need to be applied based on this conflict type.
+            // ReadCommitted: Only check for WW conflicts against committed versions.
             for (key, _change) in write_set {
                 if let Some(current_value) = txn_buffer.get(key) {
-                    // In ReadCommitted, a write-write conflict occurs if another transaction
-                    // committed a change to this key after this transaction started.
-                    // Using the transaction ID as a proxy for start version.
-                    if current_value.version() > _transaction_id {
-                        conflicts.insert(key.clone(), ConflictType::WriteWrite);
+                    // Conflict if another transaction committed a change after this one started.
+                    if current_value.version() > committing_tx_id {
+                        debug!("Conflict Detail: Committed WW (RC) on '{}' (Tx {} start {}, Buffer ver {})", key, committing_tx_id, committing_tx_id, current_value.version());
+                        conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 }
             }
         }
-        TransactionIsolation::RepeatableRead | TransactionIsolation::Serializable => {
-            // RepeatableRead/Serializable: Validate the read set.
-            // Check if any data read by this transaction has been modified (committed by another transaction)
-            // since it was read.
+        TransactionIsolation::RepeatableRead => {
+            // RepeatableRead: Check both reads and writes against committed versions.
+
+            // Read Validation
             for (key, read_version) in read_set {
                 if let Some(current_value) = txn_buffer.get(key) {
                     if current_value.version() > *read_version {
-                        // Data read by this transaction has been modified by another transaction.
-                        conflicts.insert(key.clone(), ConflictType::ReadWrite);
+                        debug!("Conflict Detail: Committed RW on '{}' (Tx {} read ver {}, Buffer ver {})", key, committing_tx_id, read_version, current_value.version());
+                        conflicts.insert(key.clone(), ConflictType::CommittedReadWrite);
                     }
                 } else {
-                    // Data read by this transaction was deleted by another transaction.
-                    // This is also a conflict for RepeatableRead/Serializable.
-                    conflicts.insert(key.clone(), ConflictType::ReadDelete);
+                    // Heuristic: Assume conflict if deleted after read (requires read_version > 0)
+                    if *read_version > 0 {
+                        debug!("Conflict Detail: Committed RD on '{}' (Tx {} read ver {}, Buffer deleted)", key, committing_tx_id, read_version);
+                        conflicts.insert(key.clone(), ConflictType::CommittedReadDelete);
+                    }
                 }
             }
 
-            // Check for Write-Write and Write-Delete Conflicts:
-            // If this transaction is trying to write to a key that was modified or deleted by another
-            // transaction concurrently.
-            for (key, change) in write_set {
+            // Write Validation
+            for (key, _change) in write_set {
                 if let Some(current_value) = txn_buffer.get(key) {
-                    // Get the version of the key as seen by this transaction.
-                    // If the key was read, use the version from the read set.
-                    // If the key was not read, use the transaction's ID as a proxy for its start version.
-                    let transaction_version_of_key =
-                        read_set.get(key).copied().unwrap_or(_transaction_id);
-
-                    if current_value.version() > transaction_version_of_key {
-                        // Data being written by this transaction was modified by another transaction
-                        // after this transaction read it (or started, if not read).
-                        conflicts.insert(key.clone(), ConflictType::WriteWrite);
+                    // Check for WW conflict based on read version (if read) or start time (if not read)
+                    let baseline_version = read_set.get(key).copied().unwrap_or(committing_tx_id);
+                    if current_value.version() > baseline_version {
+                        debug!("Conflict Detail: Committed WW (RR) on '{}' (Tx {} baseline ver {}, Buffer ver {})", key, committing_tx_id, baseline_version, current_value.version());
+                        conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 } else {
-                    // The key exists in the write set but not in the txn_buffer.
-                    // This could happen if the key was inserted by this transaction,
-                    // or if it was deleted by another transaction concurrently.
-                    // If it was deleted by another transaction, it's a Write-Delete conflict.
-                    // We need to check if the key existed in the txn_buffer at the transaction's start time
-                    // and was deleted by another transaction. This requires more state or a different approach.
-                    // For now, a simplified check: if the key is in the write set (as a write/insert)
-                    // and is not currently in the txn_buffer, and it existed at the transaction's start version,
-                    // it's a Write-Delete conflict. Without tracking historical states or a transaction start snapshot,
-                    // accurately detecting Write-Delete is hard.
-                    // A simpler (potentially less accurate) check: if the key is in the write set (as a write/insert)
-                    // and is not currently in the txn_buffer, and it was *not* in the read_set (meaning this transaction
-                    // didn't see it), it might indicate a concurrent deletion. This is heuristic.
-                    // TODO: Implement accurate Write-Delete conflict detection.
-                    if change.is_some()
-                        && txn_buffer.get(key).is_none()
-                        && !read_set.contains_key(key)
-                    {
-                        // This is a heuristic check for Write-Delete. Needs refinement.
-                        // println!("Heuristic Write-Delete conflict detected for key {}", key); // Commented out
-                        // conflicts.insert(key.clone(), ConflictType::WriteDelete); // Commented out
-                    }
+                    // Item is in write_set but not in buffer (potential insert or write on deleted item)
+                    // CommittedWriteDelete check remains difficult without more history.
                 }
             }
-
-            // Serializable validation using dependency_tracker is now solely handled in Transaction::commit's call to check_for_cycles.
+        }
+        TransactionIsolation::Serializable => {
+            // This case should not be reached as Serializable validation is handled by DependencyTracker::validate_serializability
+            debug!("Error: detect_conflicts called unexpectedly for Serializable isolation level.");
+            // Return empty conflicts for now, but this indicates a logic error in Transaction::commit
+            // return Err(Error::Other("detect_conflicts called for Serializable".to_string()));
         }
     }
 
