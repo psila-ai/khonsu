@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use crossbeam_skiplist::SkipMap;
 
-use crate::errors; // Import the errors module
-
 /// Represents a transaction for dependency tracking purposes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DependencyTransaction {

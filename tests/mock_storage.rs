@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use arrow::record_batch::RecordBatch;
 
 use khonsu::{storage::{Storage, StorageMutation}, errors::Result}; // Assuming khonsu is the crate name

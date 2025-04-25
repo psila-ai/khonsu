@@ -8,9 +8,9 @@ use crate::data_store::versioned_value::VersionedValue;
 use crate::errors::{Result, Error};
 use crate::TransactionIsolation;
 use crate::conflict::resolution::ConflictResolution;
-use crate::conflict::detection::{detect_conflicts, ConflictType}; // Import the conflict detection function and ConflictType
-use crate::storage::{Storage, StorageMutation}; // Import the Storage trait and StorageMutation
-use crate::dependency_tracking::{DependencyTracker, DataItem}; // Import DependencyTracker and DataItem
+use crate::conflict::detection::detect_conflicts;
+use crate::storage::{Storage, StorageMutation};
+use crate::dependency_tracking::{DependencyTracker, DataItem};
 
 /// Represents a single transaction.
 pub struct Transaction {
@@ -178,7 +178,7 @@ impl Transaction {
                     // before being applied to the txn_buffer in Phase 2.
                     let mut merged_changes: HashMap<String, Option<RecordBatch>> = HashMap::new();
 
-                    for (key, conflict_type) in &conflicts {
+                    for (key, _conflict_type) in &conflicts {
                         // For Append resolution, we primarily care about conflicts on keys
                         // where the transaction has a pending write/update (Some(RecordBatch)).
                         if let Some(change) = write_set_to_apply.get(key) {

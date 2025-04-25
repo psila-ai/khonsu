@@ -10,7 +10,6 @@ mod mock_storage;
 
 // Configure tests to run single-threaded
 #[cfg(test)]
-#[cfg(not(loom))] // Exclude when using Loom for concurrency testing
 mod single_threaded_tests {
     use super::*;
 

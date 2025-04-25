@@ -1,5 +1,4 @@
-use crate::errors::Result; // Assuming errors module is at crate root
-use crate::errors::Error; // Assuming errors module is at crate root
+use crate::errors::Error;
 use arrow::record_batch::RecordBatch;
 
 /// Represents the changes made by a transaction that need to be
@@ -11,7 +10,7 @@ pub type TransactionChanges = Vec<(String, Option<RecordBatch>)>; // (Key, Some(
 #[derive(Debug, thiserror::Error)]
 pub enum ParticipantError {
     #[error("Participant error: {0}")]
-KhonsuError(#[from] Error),
+    KhonsuError(#[from] Error),
     #[error("Other participant error: {0}")]
     Other(String),
 }

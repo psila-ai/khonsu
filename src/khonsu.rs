@@ -2,12 +2,22 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use crate::data_store::txn_buffer::TxnBuffer;
-use crate::errors::Result;
 use crate::transaction::Transaction;
 use crate::{ParticipantError, TransactionChanges, TransactionIsolation, TwoPhaseCommitParticipant};
 use crate::conflict::resolution::ConflictResolution;
 use crate::storage::Storage; // Import the Storage trait
 use crate::dependency_tracking::DependencyTracker; // Import DependencyTracker
+
+/// Konshu Prelude
+pub mod prelude {
+    pub use crate::data_store::txn_buffer::*;
+    pub use crate::errors::*;
+    pub use crate::transaction::*;
+    pub use crate::*;
+    pub use crate::conflict::resolution::*;
+    pub use crate::storage::*;
+    pub use crate::dependency_tracking::*;
+}
 
 /// The main entry point for the Khonsu Software Transactional Memory system.
 pub struct Khonsu {
@@ -66,7 +76,7 @@ impl TwoPhaseCommitParticipant for Khonsu {
     // Using u64 as a simple GlobalTransactionId for now.
     type GlobalTransactionId = u64;
 
-    fn prepare_transaction(&self, global_tx_id: Self::GlobalTransactionId, changes: TransactionChanges) -> std::result::Result<bool, ParticipantError> {
+    fn prepare_transaction(&self, global_tx_id: Self::GlobalTransactionId, _changes: TransactionChanges) -> std::result::Result<bool, ParticipantError> {
         // TODO: Implement prepare logic.
         // This should involve validating the changes against the current state
         // in the txn_buffer, similar to the first phase of local commit.

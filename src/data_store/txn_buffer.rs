@@ -1,9 +1,6 @@
 use crossbeam_skiplist::SkipMap;
-use std::sync::Arc;
-use arrow::record_batch::RecordBatch;
 
 use crate::data_store::versioned_value::VersionedValue;
-use crate::errors::Result; // Assuming errors module is at crate root
 
 /// The key type for data items in the store. Using String for now.
 type DataKey = String;

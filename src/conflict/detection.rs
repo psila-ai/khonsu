@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use arrow::record_batch::RecordBatch;
 
 use crate::data_store::txn_buffer::TxnBuffer;
-use crate::errors::{Result, Error};
+use crate::errors::*;
 use crate::TransactionIsolation;
 
 /// Represents the type of conflict detected.

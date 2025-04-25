@@ -1,10 +1,7 @@
 use arrow::record_batch::RecordBatch;
-use arrow::array::{ArrayRef, StringArray, Array, PrimitiveArray, Int64Array, Float64Array, BooleanArray};
-use arrow::datatypes::{Schema, Field, DataType};
-use std::sync::Arc;
+use arrow::array::*;
+use arrow::datatypes::*;
 use std::collections::{HashMap, HashSet};
-use arrow::buffer::Buffer;
-use arrow::array::builder::{StringBuilder, Int64Builder, Float64Builder, BooleanBuilder}; // Use StringBuilder and add new builders
 
 use crate::errors::{Result, Error}; // Assuming errors module is at crate root
 
@@ -124,7 +121,7 @@ pub fn merge_record_batches(
 }
 
 /// Helper function to create an appropriate ArrayBuilder based on DataType.
-fn create_builder(data_type: &DataType, capacity: usize) -> Box<dyn arrow::array::ArrayBuilder> {
+fn create_builder(data_type: &DataType, _capacity: usize) -> Box<dyn arrow::array::ArrayBuilder> {
     match data_type {
         DataType::Utf8 => Box::new(StringBuilder::new()),
         DataType::Int64 => Box::new(Int64Builder::new()),
