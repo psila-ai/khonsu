@@ -1,5 +1,5 @@
 <h1 align="center">
-    <img src="https://github.com/Jet-Engine/khonsu/raw/master/art/khonsu.jpg" width="300" height="300"/>
+    <img src="https://github.com/Jet-Engine/khonsu/raw/master/art/khonsu.jpg" width="400" height="400"/>
 </h1>
 <div align="center">
  <strong>
