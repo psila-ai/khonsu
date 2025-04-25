@@ -201,13 +201,13 @@ mod single_threaded_tests {
         // Tx2 starts and reads
         let mut txn2 = khonsu.start_transaction();
         let txn2_id = txn2.id();
-        let read_batch_tx2 = txn2.read(&"key1".to_string()).unwrap().unwrap();
+        let read_batch_tx2 = txn2.read(&"key1".to_string()).expect("Error reading data in Tx2").unwrap();
         println!("Tx2 ({}) read key1", txn2_id);
         // Assert Tx2 read the initial data
         assert_eq!(&*read_batch_tx2, &initial_record_batch);
 
         // Tx1 reads (after Tx2 read)
-        let read_batch_tx1 = txn1.read(&"key1".to_string()).unwrap().unwrap();
+        let read_batch_tx1 = txn1.read(&"key1".to_string()).expect("Error reading data in Tx1").unwrap();
         println!("Tx1 ({}) read key1", txn1_id);
         // Assert Tx1 reads its own write (most likely, depending on read implementation)
         // Or it might read the initial data if its write is not yet visible to itself.
@@ -221,11 +221,10 @@ mod single_threaded_tests {
 
         // Verify Tx1 commit failed with TransactionConflict
         assert!(commit_result_tx1.is_err());
-        match commit_result_tx1.unwrap_err() {
-            Error::TransactionConflict => {
-                println!("Tx1 correctly failed with TransactionConflict");
-            }
-            e => panic!("Tx1 failed with unexpected error: {:?}", e),
+        if let Err(Error::TransactionConflict) = commit_result_tx1 {
+            println!("Tx1 correctly failed with TransactionConflict");
+        } else {
+            panic!("Tx1 failed with unexpected result: {:?}", commit_result_tx1);
         }
 
         // Commit Tx2 (should succeed as Tx1 aborted)
@@ -279,7 +278,7 @@ mod single_threaded_tests {
         // Tx1 starts and reads
         let mut txn1 = khonsu.start_transaction();
         let txn1_id = txn1.id();
-        let read_batch_tx1 = txn1.read(&"key1".to_string()).unwrap().unwrap();
+        let read_batch_tx1 = txn1.read(&"key1".to_string()).expect("Error reading data in Tx1").unwrap();
         println!("Tx1 ({}) read key1", txn1_id);
         // Assert Tx1 read the initial data
         assert_eq!(&*read_batch_tx1, &initial_record_batch);
@@ -314,11 +313,10 @@ mod single_threaded_tests {
 
         // Verify Tx2 commit failed with TransactionConflict
         assert!(commit_result_tx2.is_err());
-        match commit_result_tx2.unwrap_err() {
-            Error::TransactionConflict => {
-                println!("Tx2 correctly failed with TransactionConflict");
-            }
-            e => panic!("Tx2 failed with unexpected error: {:?}", e),
+        if let Err(Error::TransactionConflict) = commit_result_tx2 {
+            println!("Tx2 correctly failed with TransactionConflict");
+        } else {
+            panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
 
         // Verify the data in storage is still the initial data (Tx2 aborted)
@@ -402,11 +400,10 @@ mod single_threaded_tests {
 
         // Verify Tx2 commit failed with TransactionConflict
         assert!(commit_result_tx2.is_err());
-        match commit_result_tx2.unwrap_err() {
-            Error::TransactionConflict => {
-                println!("Tx2 correctly failed with TransactionConflict");
-            }
-            e => panic!("Tx2 failed with unexpected error: {:?}", e),
+        if let Err(Error::TransactionConflict) = commit_result_tx2 {
+            println!("Tx2 correctly failed with TransactionConflict");
+        } else {
+            panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
 
         // Verify the data in storage is still Tx1's data (Tx2 aborted)
@@ -450,7 +447,7 @@ mod single_threaded_tests {
         let txn2_id = txn2.id();
 
         // Tx1 reads key1
-        txn1.read(&"key1".to_string()).unwrap();
+        txn1.read(&"key1".to_string()).expect("Error reading data in Tx1");
         println!("Tx1 ({}) read key1", txn1_id);
 
         // Tx2 writes key1
@@ -461,11 +458,16 @@ mod single_threaded_tests {
         txn2.write("key1".to_string(), record_batch_tx2).unwrap();
         println!("Tx2 ({}) wrote key1", txn2_id);
 
-        // Commit Tx1 (should succeed)
+        // Commit Tx1 (should fail)
         println!("Attempting to commit Tx1 ({})", txn1_id);
         let commit_result_tx1 = txn1.commit();
         println!("Tx1 commit result: {:?}", commit_result_tx1);
-        assert!(commit_result_tx1.is_ok());
+        assert!(commit_result_tx1.is_err());
+        if let Err(Error::TransactionConflict) = commit_result_tx1 {
+            println!("Tx1 correctly failed with TransactionConflict");
+        } else {
+            panic!("Tx1 failed with unexpected result: {:?}", commit_result_tx1);
+        }
 
         // Abort Tx2
         println!("Attempting to abort Tx2 ({})", txn2_id);

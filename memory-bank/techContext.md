@@ -21,12 +21,13 @@
 ## Dependencies
 
 - `arrow`: For data representation.
-- `crossbeam-epoch`: For safe memory reclamation in lock-free data structures.
-- `crossbeam-skiplist`: For the lock-free skip map used in the Shared Data Store.
+- `parking_lot`: For `RwLock` used in `TxnBuffer`.
+- `crossbeam-epoch`: For safe memory reclamation in lock-free data structures (used in DependencyTracker).
+- `crossbeam-skiplist`: For the skip map used in the DependencyTracker.
 - `crossbeam-queue`: For lock-free queues (`SegQueue`) used internally.
 - `futures`: If an executor is needed, the `executor` feature will be used.
-- `std::sync::atomic`: For atomic operations.
-- **Concurrent Data Structures:** Utilizing concurrent data structures (like `crossbeam-skiplist`) for dependency tracking to ensure thread safety without traditional locks.
+- `std::sync::atomic`: For atomic operations (used for transaction counter).
+- **Concurrent Data Structures:** Utilizing `parking_lot::RwLock` for `TxnBuffer` and `crossbeam-skiplist` for `DependencyTracker`.
 - **Concurrent Algorithms:** Implementing concurrent algorithms for tasks like cycle detection in the transaction dependency graph.
 
 ## Tool Usage Patterns

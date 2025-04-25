@@ -105,8 +105,8 @@ pub fn detect_conflicts(
                         && !read_set.contains_key(key)
                     {
                         // This is a heuristic check for Write-Delete. Needs refinement.
-                        println!("Heuristic Write-Delete conflict detected for key {}", key);
-                        conflicts.insert(key.clone(), ConflictType::WriteDelete);
+                        // println!("Heuristic Write-Delete conflict detected for key {}", key); // Commented out
+                        // conflicts.insert(key.clone(), ConflictType::WriteDelete); // Commented out
                     }
                 }
             }

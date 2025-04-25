@@ -6,18 +6,18 @@ The system will follow a typical STM architecture. There will be a shared, globa
 
 ## Key Technical Decisions
 
-- **Lock-Free Internals:** Utilize atomic operations and specific lock-free data structures from the `crossbeam` crate: `crossbeam-skiplist::SkipMap` for the Transaction Buffer (TxnBuffer) and `crossbeam-queue::SegQueue` for internal queuing. Avoid traditional mutexes or locks and system calls in the core transaction path.
+- **Concurrency Control:** Utilize `parking_lot::RwLock` to protect the shared `TxnBuffer`. While the initial goal was lock-free internals, the current implementation uses a standard reader-writer lock for the main data buffer. Atomic operations from `std::sync::atomic` are used for the transaction counter. `crossbeam-queue::SegQueue` is used for internal queuing where needed.
 - **Data Representation:** Data will be managed in chunks compatible with Arrow RecordBatches. The internal representation should allow for efficient updates and versioning.
-- **Versioning:** Implement a mechanism for versioning data or transactions to support conflict detection and rollback. This could involve multi-version concurrency control (MVCC) principles.
+- **Versioning:** Implement a mechanism for versioning data or transactions to support conflict detection and rollback. This involves assigning a version (commit timestamp) to each committed change.
 - **Conflict Detection:** During commit, compare the read and written data versions of the committing transaction against the current state in the Transaction Buffer (TxnBuffer) to identify conflicts with other concurrently committed transactions.
 - **Conflict Resolution:** Implement the specified strategies (append, ignore, replace, fail) based on the type of conflict and configuration.
 - **Rollback:** Design the transaction mechanism to easily discard staged changes and revert to the state before the transaction began. This is simplified by operating on private copies/views.
-- **Transaction Dependency Tracking:** Implement a mechanism to track read and write dependencies between transactions. This is essential for enforcing Serializable isolation and involves using a `DependencyTracker` to record which transactions read or wrote which data items.
+- **Transaction Dependency Tracking:** Implement a mechanism to track read and write dependencies between transactions. This is essential for enforcing Serializable isolation and involves using a `DependencyTracker` to record which transactions read or wrote which data items. The `DependencyTracker` currently uses `crossbeam-skiplist::SkipMap`, but the read-modify-write operations on `ItemDependency` within the SkipMap are not truly atomic with `crossbeam-skiplist 0.1`.
 
 ## Component Relationships
 
 - **Transaction Manager:** Orchestrates transactions, handles start, commit, and rollback requests. Interacts with the Transaction Buffer (TxnBuffer).
-- **Transaction Buffer (TxnBuffer):** The central in-memory repository for the data, implemented using `crossbeam-skiplist::SkipMap` for concurrent, lock-free access and updates. Manages data versioning.
+- **Transaction Buffer (TxnBuffer):** The central in-memory repository for the data, implemented using a `HashMap` protected by `parking_lot::RwLock` for concurrent access and updates. Manages data versioning.
 - **Transaction:** Represents an ongoing unit of work. Holds the transaction's read set, write set (staged changes), and configuration (isolation level, resolution strategy).
 - **Storage Trait:** An external trait that the STM system will interact with to **persist** committed data to durable storage. This trait needs to support atomic writes of RecordBatches and will not contain any transaction-specific logic.
 - **TwoPhaseCommitParticipant Trait:** An external trait implemented by the `Khonsu` instance to participate in distributed commit protocols, inspired by `omnipaxos`.

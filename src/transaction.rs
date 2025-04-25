@@ -144,6 +144,16 @@ impl Transaction {
             }
         }
 
+        // For Serializable isolation, perform cycle detection *before* conflict detection.
+        if self.isolation_level == TransactionIsolation::Serializable {
+            if !self.dependency_tracker.check_for_cycles(self.id)? {
+                // Cycle detected, serializability violation.
+                // Remove dependencies for this transaction as it's aborting.
+                self.dependency_tracker.remove_transaction_dependencies(self.id);
+                return Err(Error::TransactionConflict);
+            }
+        }
+
         // Perform conflict detection, which now includes serializability validation for Serializable transactions.
         let conflicts = detect_conflicts(
             self.id,

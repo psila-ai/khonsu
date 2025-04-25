@@ -1,5 +1,5 @@
 use ahash::{AHashMap as HashMap, AHashSet as HashSet};
-use crossbeam_skiplist::SkipMap;
+use parking_lot::RwLock;
 
 use crate::errors::*;
 
@@ -41,7 +41,7 @@ impl ItemDependency {
 /// This structure maps data items to the transactions that have read or written them.
 pub struct DependencyTracker {
     // Map from DataItem key to the transactions that have read or wrote it.
-    item_dependencies: SkipMap<String, ItemDependency>,
+    item_dependencies: RwLock<HashMap<String, ItemDependency>>,
     // TODO: Need a way to track dependencies between transactions based on this item-level information.
     // This might involve building a transaction dependency graph during validation.
 }
@@ -50,39 +50,20 @@ impl DependencyTracker {
     /// Creates a new `DependencyTracker`.
     pub fn new() -> Self {
         Self {
-            item_dependencies: SkipMap::new(),
+            item_dependencies: RwLock::new(HashMap::new()),
         }
     }
 
     /// Records that a transaction read a data item at a specific version.
     pub fn record_read(&self, reader_id: u64, data_item: DataItem, read_version: u64) {
-        // Use a read-modify-write loop to atomically update the ItemDependency.
-        loop {
-            let existing_entry = self.item_dependencies.get(&data_item.key);
-            let mut item_dep = existing_entry
-                .map(|entry| entry.value().clone())
-                .unwrap_or_else(ItemDependency::new);
+        let mut item_dependencies = self.item_dependencies.write();
+        let item_dep = item_dependencies
+            .entry(data_item.key.clone())
+            .or_insert_with(ItemDependency::new);
 
-            // Modify the ItemDependency: add the reader and the version they read.
-            item_dep.readers.insert(reader_id, read_version);
+        // Modify the ItemDependency: add the reader and the version they read.
+        item_dep.readers.insert(reader_id, read_version);
 
-            // Attempt to replace the old entry with the modified one.
-            // This is not a true compare-and-swap in crossbeam-skiplist 0.1's public API.
-            // The `insert` method will unconditionally replace the entry if the key exists.
-            // In a highly concurrent scenario, another thread could have updated the entry
-            // between our `get` and `insert`. A robust solution would require a compare-and-swap
-            // or a method that returns whether the insertion replaced an existing value.
-            // With crossbeam-skiplist 0.1, we rely on the fact that `insert` is atomic for the key,
-            // but the read-modify-write loop is not truly atomic without a compare-and-swap.
-            // This implementation is a best effort with the available API.
-            self.item_dependencies
-                .insert(data_item.key.clone(), item_dep.clone());
-
-            // TODO: Add a check here to see if the insert was successful in replacing the *specific*
-            // entry we read. This is hard with crossbeam-skiplist 0.1.
-            // For now, we assume the insert succeeded and break the loop.
-            break;
-        }
         println!(
             "Recorded read: Transaction {} read {:?} at version {}",
             reader_id, data_item, read_version
@@ -92,27 +73,15 @@ impl DependencyTracker {
     /// Records that a transaction intends to write to a data item at a specific version.
     /// The write_version here is the version *being written*, which will become the new latest version.
     pub fn record_write(&self, writer_id: u64, data_item: DataItem, write_version: u64) {
-        // Use a read-modify-write loop to atomically update the ItemDependency.
-        loop {
-            let existing_entry = self.item_dependencies.get(&data_item.key);
-            let mut item_dep = existing_entry
-                .map(|entry| entry.value().clone())
-                .unwrap_or_else(ItemDependency::new);
+        let mut item_dependencies = self.item_dependencies.write();
+        let item_dep = item_dependencies
+            .entry(data_item.key.clone())
+            .or_insert_with(ItemDependency::new);
 
-            // Modify the ItemDependency: add the writer and the version they are writing.
-            // This allows tracking multiple potential writers for WW conflicts.
-            item_dep.writers.insert(writer_id, write_version);
+        // Modify the ItemDependency: add the writer and the version they are writing.
+        // This allows tracking multiple potential writers for WW conflicts.
+        item_dep.writers.insert(writer_id, write_version);
 
-            // Attempt to replace the old entry with the modified one.
-            // Similar limitations as in record_read apply regarding atomicity of the RMW loop.
-            self.item_dependencies
-                .insert(data_item.key.clone(), item_dep.clone());
-
-            // TODO: Add a check here to see if the insert was successful in replacing the *specific*
-            // entry we read. This is hard with crossbeam-skiplist 0.1.
-            // For now, we assume the insert succeeded and break the loop.
-            break;
-        }
         println!(
             "Recorded write: Transaction {} intends to write to {:?} at version {}",
             writer_id, data_item, write_version
@@ -124,96 +93,100 @@ impl DependencyTracker {
     /// Returns `Ok(true)` if no cycle is detected, `Ok(false)` if a cycle is detected.
     /// This implementation builds a dependency graph based on read/write sets and versions
     /// and performs DFS to detect cycles.
-    pub fn check_for_cycles(&self, committing_tx_id: u64) -> Result<bool> {
-        // Build the transaction dependency graph.
-        // Edges represent dependencies that would violate serializability if the committing
-        // transaction were to commit.
+    pub fn check_for_cycles(&self, _committing_tx_id: u64) -> Result<bool> {
+        // Build the transaction dependency graph for serializability validation.
+        // An edge Tx_A -> Tx_B exists if Tx_A must serialize before Tx_B.
+        // This occurs if they access the same data item and at least one access is a write,
+        // and their access order creates a dependency that violates serializability if not ordered correctly.
+
+        let item_dependencies = self.item_dependencies.read();
         let mut graph: HashMap<u64, HashSet<u64>> = HashMap::new();
 
-        // Iterate over item dependencies to build graph edges for serializability.
-        // An edge Tx_A -> Tx_B exists if Tx_A must serialize before Tx_B.
-        // This occurs if they access the same data item and at least one access is a write.
-        for entry in self.item_dependencies.iter() {
-            let item_dep = entry.value();
-
+        // Iterate over item dependencies to build graph edges.
+        for (_item_key, item_dep) in item_dependencies.iter() {
             // Consider dependencies between any two transactions (Tx_A and Tx_B) that accessed this item.
+            let accessing_txns: HashSet<u64> = item_dep
+                .readers
+                .keys()
+                .chain(item_dep.writers.keys())
+                .copied()
+                .collect();
 
-            // Case 1: Read-Write Dependency (RW)
-            // If Tx_A read item X, and Tx_B wrote item X, add edge Tx_A -> Tx_B.
-            for reader_id in item_dep.readers.keys() {
-                for writer_id in item_dep.writers.keys() {
-                    if reader_id != writer_id {
-                        graph
-                            .entry(*reader_id)
-                            .or_insert_with(HashSet::new)
-                            .insert(*writer_id);
+            for tx_a_id in &accessing_txns {
+                for tx_b_id in &accessing_txns {
+                    if tx_a_id == tx_b_id {
+                        continue; // No dependency on self
                     }
-                }
-            }
 
-            // Case 2: Write-Read Dependency (WR)
-            // If Tx_A wrote item X, and Tx_B read item X, add edge Tx_A -> Tx_B.
-            for writer_id in item_dep.writers.keys() {
-                for reader_id in item_dep.readers.keys() {
-                    if writer_id != reader_id {
-                        graph
-                            .entry(*writer_id)
-                            .or_insert_with(HashSet::new)
-                            .insert(*reader_id);
-                    }
-                }
-            }
+                    // Check for dependencies that create serialization order constraints:
 
-            // Case 3: Write-Write Dependency (WW)
-            // If Tx_A wrote item X, and Tx_B wrote item X, add edge Tx_A -> Tx_B.
-            // The direction here is arbitrary for cycle detection; any edge between them
-            // due to a WW conflict on the same item is sufficient to detect a cycle.
-            for (writer1_id, _) in item_dep.writers.iter() {
-                for (writer2_id, _) in item_dep.writers.iter() {
-                    if writer1_id != writer2_id {
-                        graph
-                            .entry(*writer1_id)
-                            .or_insert_with(HashSet::new)
-                            .insert(*writer2_id);
+                    // Case 1: Write-Read Dependency (WR)
+                    // If Tx_A wrote item X, and Tx_B read item X, and Tx_B read a version of X
+                    // that was written by Tx_A or an earlier transaction, then Tx_A must serialize before Tx_B.
+                    // This is implicitly handled by the conflict detection logic checking read versions.
+                    // However, for cycle detection, we need to represent the potential for a cycle.
+                    // If Tx_A wrote X and Tx_B read X, and Tx_A commits after Tx_B started, this is a WR conflict.
+                    // The dependency is Tx_A -> Tx_B.
+                    if item_dep.writers.contains_key(tx_a_id) && item_dep.readers.contains_key(tx_b_id) {
+                         // Add edge Tx_A -> Tx_B
+                         graph.entry(*tx_a_id).or_insert_with(HashSet::new).insert(*tx_b_id);
                     }
+
+
+                    // Case 2: Read-Write Dependency (RW)
+                    // If Tx_A read item X, and Tx_B wrote item X, and Tx_B's write conflicts with Tx_A's read
+                    // (i.e., Tx_B commits after Tx_A read X), then Tx_A must serialize before Tx_B.
+                    // The dependency is Tx_A -> Tx_B.
+                     if item_dep.readers.contains_key(tx_a_id) && item_dep.writers.contains_key(tx_b_id) {
+                         // Add edge Tx_A -> Tx_B
+                         graph.entry(*tx_a_id).or_insert_with(HashSet::new).insert(*tx_b_id);
+                     }
+
+
+                    // Case 3: Write-Write Dependency (WW)
+                    // If Tx_A wrote item X, and Tx_B wrote item X, their relative serialization order matters.
+                    // If Tx_A commits before Tx_B, then Tx_A -> Tx_B. If Tx_B commits before Tx_A, then Tx_B -> Tx_A.
+                    // For cycle detection, a WW conflict on the same item between Tx_A and Tx_B implies a potential
+                    // dependency in either direction depending on commit order. To detect cycles, we can add
+                    // edges in both directions (Tx_A <-> Tx_B) or rely on the fact that if a cycle exists
+                    // involving WW conflicts, it will be detected regardless of the arbitrary edge direction
+                    // chosen for WW pairs. Let's add edges in both directions for simplicity in graph building.
+                     if item_dep.writers.contains_key(tx_a_id) && item_dep.writers.contains_key(tx_b_id) {
+                         // Add edge Tx_A -> Tx_B
+                         graph.entry(*tx_a_id).or_insert_with(HashSet::new).insert(*tx_b_id);
+                         // Add edge Tx_B -> Tx_A
+                         graph.entry(*tx_b_id).or_insert_with(HashSet::new).insert(*tx_a_id);
+                     }
                 }
             }
         }
 
-        // Perform DFS to detect cycles involving the committing transaction.
+        // Perform DFS to detect cycles.
+        // A cycle in this graph indicates a serializability violation.
         let mut visited: HashSet<u64> = HashSet::new();
         let mut recursion_stack: HashSet<u64> = HashSet::new();
 
-        // Check for cycles starting from the committing transaction.
-        if self.dfs_check_cycle(committing_tx_id, &graph, &mut visited, &mut recursion_stack) {
-            // Cycle detected involving the committing transaction.
-            Ok(false) // Serializable violation
-        } else {
-            // A cycle could exist that doesn't start from the committing transaction
-            // but still involves it. A full graph cycle detection is more accurate.
-            // For a basic implementation, we can iterate through all transactions
-            // involved in the graph and check for cycles.
+        // Iterate through all transactions that are part of the graph and check for cycles.
+        // We need to check all components of the graph, not just starting from the committing transaction,
+        // as a cycle anywhere in the graph violates serializability.
+        let all_tx_ids: HashSet<u64> = graph.keys().copied().collect();
 
-            let mut all_visited: HashSet<u64> = HashSet::new();
-            for tx_id in graph.keys() {
-                if !all_visited.contains(tx_id) {
-                    let mut current_recursion_stack: HashSet<u64> = HashSet::new();
-                    if self.dfs_check_cycle(
-                        *tx_id,
-                        &graph,
-                        &mut all_visited,
-                        &mut current_recursion_stack,
-                    ) {
-                        // Check if the committing transaction is part of this cycle.
-                        if current_recursion_stack.contains(&committing_tx_id) {
-                            return Ok(false); // Serializable violation
-                        }
-                    }
+        for tx_id in &all_tx_ids {
+            if !visited.contains(tx_id) {
+                if self.dfs_check_cycle(*tx_id, &graph, &mut visited, &mut recursion_stack) {
+                    // Cycle detected.
+                    println!("Serializable validation failed: Cycle detected in dependency graph.");
+                    return Ok(false); // Serializable violation
                 }
             }
-
-            Ok(true) // No cycle detected
         }
+
+        // If the committing transaction is not in the graph but has dependencies recorded,
+        // we should still consider it. However, the current graph building includes all
+        // transactions with recorded dependencies.
+
+        println!("Serializable validation successful: No cycle detected in dependency graph.");
+        Ok(true) // No cycle detected
     }
 
     // Helper function for DFS-based cycle detection.
@@ -259,22 +232,16 @@ impl DependencyTracker {
     // This also needs to be done carefully to be concurrent-safe with the SkipMap.
     // This implementation is a best effort given the limitations of crossbeam-skiplist 0.1.
     pub fn remove_transaction_dependencies(&self, tx_id: u64) {
+        let mut item_dependencies = self.item_dependencies.write();
         // Iterate through all item dependencies.
-        // We need to collect the keys first because we cannot modify the SkipMap while iterating over it.
-        let keys_to_check: Vec<String> = self
-            .item_dependencies
-            .iter()
-            .map(|entry| entry.key().clone())
+        // We need to collect the keys first because we cannot modify the HashMap while iterating over it.
+        let keys_to_check: Vec<String> = item_dependencies
+            .keys()
+            .cloned()
             .collect();
 
         for item_key in keys_to_check {
-            // Use a read-modify-write loop to atomically update the ItemDependency for this key.
-            loop {
-                let existing_entry = self.item_dependencies.get(&item_key);
-                let mut item_dep = existing_entry
-                    .map(|entry| entry.value().clone())
-                    .unwrap_or_else(ItemDependency::new);
-
+            if let Some(item_dep) = item_dependencies.get_mut(&item_key) {
                 let mut modified = false;
                 // Remove from readers.
                 if item_dep.readers.remove(&tx_id).is_some() {
@@ -288,25 +255,9 @@ impl DependencyTracker {
 
                 if modified {
                     if item_dep.readers.is_empty() && item_dep.writers.is_empty() {
-                        // If no more dependencies for this item, attempt to remove the item from the SkipMap.
-                        // This remove operation is atomic for the key.
-                        self.item_dependencies.remove(&item_key);
-                        break; // Successfully removed or another thread did.
-                    } else {
-                        // Otherwise, attempt to insert the modified ItemDependency.
-                        // This insert operation is atomic for the key, but the RMW loop is not truly atomic
-                        // without compare-and-swap. Another thread could have modified the entry
-                        // between our `get` and `insert`.
-                        self.item_dependencies
-                            .insert(item_key.clone(), item_dep.clone());
-                        // In a robust implementation, we would check if the insert replaced the *specific*
-                        // entry we read and retry if not. With crossbeam-skiplist 0.1, we assume success
-                        // and break, which is a simplification.
-                        break;
+                        // If no more dependencies for this item, remove the item from the HashMap.
+                        item_dependencies.remove(&item_key);
                     }
-                } else {
-                    // No modifications were needed for this item dependency.
-                    break;
                 }
             }
         }
