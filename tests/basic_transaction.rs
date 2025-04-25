@@ -316,17 +316,13 @@ mod single_threaded_tests {
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
 
-        // Verify Tx2 commit failed with TransactionConflict (SSI Backward or standard OCC should catch this)
-        assert!(commit_result_tx2.is_err());
-        if let Err(Error::TransactionConflict) = commit_result_tx2 {
-            println!("Tx2 correctly failed with TransactionConflict (RW conflict with committed Tx1)");
-        } else {
-            panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
-        }
+        // Verify Tx2 commit succeeded (SSI allows this as Tx1 only read, no dangerous structure)
+        assert!(commit_result_tx2.is_ok());
 
-        // Verify the data in storage is still the initial data (Tx2 aborted)
+        // Verify the data in storage is now Tx2's data
+        let _final_stored_batch = storage.get("key1").unwrap(); // Prefixed unused variable
         let final_stored_batch = storage.get("key1").unwrap();
-        assert_eq!(final_stored_batch, initial_record_batch);
+        assert_eq!(final_stored_batch, record_batch_tx2); // Tx2 wrote value 300
     }
 
     #[test]

@@ -189,9 +189,10 @@ impl DependencyTracker {
         for key in write_set {
              if let Some(current_value) = txn_buffer.get(key) {
                  let writer_commit_ts = current_value.version();
+                 println!("  SSI WW Check: Key='{}', CommittingTx={}, StartTs={}, BufferVersion={}", key, committing_tx_id, start_ts, writer_commit_ts); // ADDED LOG
                  // Conflict if writer committed after we started.
                  if writer_commit_ts > start_ts {
-                      println!("SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
+                      println!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
                                committing_tx_id, key, writer_commit_ts, writer_commit_ts, writer_commit_ts);
                       return Ok(false);
                  }
