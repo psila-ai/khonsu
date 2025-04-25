@@ -92,7 +92,8 @@ impl Transaction {
                     // For Serializable, record read in dependency tracker
                     if self.isolation_level == TransactionIsolation::Serializable {
                         let data_item = DataItem { key: key.clone() };
-                        self.dependency_tracker.record_read(self.id, data_item, version);
+                        self.dependency_tracker
+                            .record_read(self.id, data_item, version);
                     }
                     Ok(Some(value.data().clone()))
                 } else {
@@ -109,7 +110,8 @@ impl Transaction {
         // Record write intention immediately for Serializable isolation
         if self.isolation_level == TransactionIsolation::Serializable {
             let data_item = DataItem { key: key.clone() }; // Clone key for data_item
-            self.dependency_tracker.record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
+            self.dependency_tracker
+                .record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
         }
         // Stage the write/update in the write set.
         self.write_set.insert(key, Some(record_batch));
@@ -121,8 +123,11 @@ impl Transaction {
         let key_string = key.to_string();
         // Record write intention immediately for Serializable isolation
         if self.isolation_level == TransactionIsolation::Serializable {
-            let data_item = DataItem { key: key_string.clone() }; // Clone key for data_item
-            self.dependency_tracker.record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
+            let data_item = DataItem {
+                key: key_string.clone(),
+            }; // Clone key for data_item
+            self.dependency_tracker
+                .record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
         }
         // Stage the deletion in the write set.
         self.write_set.insert(key_string, None);
@@ -139,7 +144,6 @@ impl Transaction {
         // Need the keys for validation/marking committed
         let write_set_keys: HashSet<String> = write_set_to_apply.keys().cloned().collect();
 
-
         // Perform validation based on isolation level
         let conflicts = match self.isolation_level {
             TransactionIsolation::Serializable => {
@@ -149,7 +153,7 @@ impl Transaction {
                     self.id,
                     commit_timestamp, // Pass commit_ts
                     &self.read_set,
-                    &write_set_keys, // Use cloned keys
+                    &write_set_keys,  // Use cloned keys
                     &self.txn_buffer, // Pass buffer
                 )? {
                     // SSI validation failed (backward or forward check).
@@ -243,8 +247,8 @@ impl Transaction {
 
         // Mark as committed in tracker
         // Pass the cloned write_set_keys
-        self.dependency_tracker.mark_committed(self.id, commit_timestamp, write_set_keys);
-
+        self.dependency_tracker
+            .mark_committed(self.id, commit_timestamp, write_set_keys);
 
         Ok(())
     }

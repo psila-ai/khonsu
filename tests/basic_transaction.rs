@@ -14,7 +14,6 @@ use khonsu::{
 // Use common:: prefix for shared test utilities
 use common::MockStorage;
 
-
 // Configure tests to run single-threaded
 #[cfg(test)]
 mod single_threaded_tests {
@@ -30,8 +29,12 @@ mod single_threaded_tests {
         ]))
     }
 
-     // Helper to create batch, specific to this file's tests if needed, or use common one
-    fn create_basic_record_batch(schema: Arc<Schema>, ids: Vec<&str>, values: Vec<i64>) -> RecordBatch {
+    // Helper to create batch, specific to this file's tests if needed, or use common one
+    fn create_basic_record_batch(
+        schema: Arc<Schema>,
+        ids: Vec<&str>,
+        values: Vec<i64>,
+    ) -> RecordBatch {
         RecordBatch::try_new(
             schema,
             vec![
@@ -41,7 +44,6 @@ mod single_threaded_tests {
         )
         .unwrap()
     }
-
 
     #[test]
     fn test_basic_khonsu_creation() {
@@ -106,7 +108,10 @@ mod single_threaded_tests {
 
         // Verify data is present by reading
         let mut verify_txn_before = khonsu.start_transaction();
-        assert!(verify_txn_before.read(&"key1".to_string()).unwrap().is_some());
+        assert!(verify_txn_before
+            .read(&"key1".to_string())
+            .unwrap()
+            .is_some());
         verify_txn_before.rollback(); // Don't need to commit read
 
         // Start a new transaction, delete data, and commit
@@ -148,7 +153,8 @@ mod single_threaded_tests {
         let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
         let schema = create_basic_schema();
-        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
+        let initial_record_batch =
+            create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -159,7 +165,10 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        assert!(verify_txn_initial
+            .read(&"key1".to_string())
+            .unwrap()
+            .is_some());
         verify_txn_initial.rollback();
 
         // Scenario: W-R-W conflict (Adjusted for SSI)
@@ -179,13 +188,19 @@ mod single_threaded_tests {
         // Tx2 starts and reads
         let mut txn2 = khonsu.start_transaction();
         let txn2_id = txn2.id();
-        let read_batch_tx2 = txn2.read(&"key1".to_string()).expect("Error reading data in Tx2").unwrap();
+        let read_batch_tx2 = txn2
+            .read(&"key1".to_string())
+            .expect("Error reading data in Tx2")
+            .unwrap();
         println!("Tx2 ({}) read key1", txn2_id);
         // Assert Tx2 read the initial data
         assert_eq!(&*read_batch_tx2, &initial_record_batch);
 
         // Tx1 reads (after Tx2 read)
-        let read_batch_tx1 = txn1.read(&"key1".to_string()).expect("Error reading data in Tx1").unwrap();
+        let read_batch_tx1 = txn1
+            .read(&"key1".to_string())
+            .expect("Error reading data in Tx1")
+            .unwrap();
         println!("Tx1 ({}) read key1", txn1_id);
         // Assert Tx1 reads its own write (most likely, depending on read implementation)
         // Or it might read the initial data if its write is not yet visible to itself.
@@ -209,27 +224,28 @@ mod single_threaded_tests {
         // Verify Tx2 commit failed (due to backward validation conflict with committed Tx1)
         assert!(commit_result_tx2.is_err());
         if let Err(KhonsuError::TransactionConflict) = commit_result_tx2 {
-             println!("Tx2 correctly failed with TransactionConflict (SSI Backward Validation)");
+            println!("Tx2 correctly failed with TransactionConflict (SSI Backward Validation)");
         } else {
-             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
+            panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
 
         // Verify the data in storage is now Tx1's data (Tx1 committed, Tx2 aborted)
         let mut verify_txn_final = khonsu.start_transaction();
         let final_stored_batch = verify_txn_final.read(&"key1".to_string()).unwrap().unwrap();
         // Tx1 wrote value 200
-        let record_batch_tx1_final = create_basic_record_batch(schema.clone(), vec!["key1"], vec![200]);
+        let record_batch_tx1_final =
+            create_basic_record_batch(schema.clone(), vec!["key1"], vec![200]);
         assert_eq!(*final_stored_batch, record_batch_tx1_final);
         verify_txn_final.rollback();
     }
-
 
     #[test]
     fn test_serializable_rw_conflict() {
         let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
         let schema = create_basic_schema();
-        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
+        let initial_record_batch =
+            create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -240,7 +256,10 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        assert!(verify_txn_initial
+            .read(&"key1".to_string())
+            .unwrap()
+            .is_some());
         verify_txn_initial.rollback();
 
         // Scenario: R-W conflict (Adjusted for SSI)
@@ -252,7 +271,10 @@ mod single_threaded_tests {
         // Tx1 starts and reads
         let mut txn1 = khonsu.start_transaction();
         let txn1_id = txn1.id();
-        let read_batch_tx1 = txn1.read(&"key1".to_string()).expect("Error reading data in Tx1").unwrap();
+        let read_batch_tx1 = txn1
+            .read(&"key1".to_string())
+            .expect("Error reading data in Tx1")
+            .unwrap();
         println!("Tx1 ({}) read key1", txn1_id);
         // Assert Tx1 read the initial data
         assert_eq!(&*read_batch_tx1, &initial_record_batch);
@@ -275,10 +297,12 @@ mod single_threaded_tests {
 
         // Verify the data in storage is still the initial data (Tx1 only read)
         let mut verify_txn_after_tx1 = khonsu.start_transaction();
-        let stored_batch_after_tx1 = verify_txn_after_tx1.read(&"key1".to_string()).unwrap().unwrap();
+        let stored_batch_after_tx1 = verify_txn_after_tx1
+            .read(&"key1".to_string())
+            .unwrap()
+            .unwrap();
         assert_eq!(*stored_batch_after_tx1, initial_record_batch);
         verify_txn_after_tx1.rollback();
-
 
         // Attempt to commit Tx2 (should succeed under SSI as Tx1 only read)
         println!("Attempting to commit Tx2 ({})", txn2_id);
@@ -295,13 +319,13 @@ mod single_threaded_tests {
         verify_txn_final.rollback();
     }
 
-
     #[test]
     fn test_serializable_ww_conflict() {
         let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
         let schema = create_basic_schema();
-        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
+        let initial_record_batch =
+            create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -312,7 +336,10 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        assert!(verify_txn_initial
+            .read(&"key1".to_string())
+            .unwrap()
+            .is_some());
         verify_txn_initial.rollback();
 
         // Scenario: W-W conflict
@@ -347,7 +374,10 @@ mod single_threaded_tests {
 
         // Verify the data in storage is now Tx1's data
         let mut verify_txn_after_tx1 = khonsu.start_transaction();
-        let stored_batch_after_tx1 = verify_txn_after_tx1.read(&"key1".to_string()).unwrap().unwrap();
+        let stored_batch_after_tx1 = verify_txn_after_tx1
+            .read(&"key1".to_string())
+            .unwrap()
+            .unwrap();
         assert_eq!(*stored_batch_after_tx1, record_batch_tx1);
         verify_txn_after_tx1.rollback();
 
@@ -359,7 +389,9 @@ mod single_threaded_tests {
         // Verify Tx2 commit failed with TransactionConflict (SSI Backward or standard OCC should catch this)
         assert!(commit_result_tx2.is_err());
         if let Err(KhonsuError::TransactionConflict) = commit_result_tx2 {
-            println!("Tx2 correctly failed with TransactionConflict (WW conflict with committed Tx1)");
+            println!(
+                "Tx2 correctly failed with TransactionConflict (WW conflict with committed Tx1)"
+            );
         } else {
             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
         }
@@ -371,13 +403,13 @@ mod single_threaded_tests {
         verify_txn_final.rollback();
     }
 
-
     #[test]
     fn test_dependency_removal_on_commit_and_abort() {
         let khonsu = setup_khonsu(TransactionIsolation::Serializable);
 
         let schema = create_basic_schema();
-        let initial_record_batch = create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
+        let initial_record_batch =
+            create_basic_record_batch(schema.clone(), vec!["key1"], vec![100]);
 
         // Write initial data with a separate transaction and commit
         let mut initial_txn = khonsu.start_transaction();
@@ -388,7 +420,10 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial.read(&"key1".to_string()).unwrap().is_some());
+        assert!(verify_txn_initial
+            .read(&"key1".to_string())
+            .unwrap()
+            .is_some());
         verify_txn_initial.rollback();
 
         // Start Tx1 (will commit) and Tx2 (will abort)
@@ -398,7 +433,8 @@ mod single_threaded_tests {
         let txn2_id = txn2.id();
 
         // Tx1 reads key1
-        txn1.read(&"key1".to_string()).expect("Error reading data in Tx1");
+        txn1.read(&"key1".to_string())
+            .expect("Error reading data in Tx1");
         println!("Tx1 ({}) read key1", txn1_id);
 
         // Tx2 writes key1
@@ -428,7 +464,8 @@ mod single_threaded_tests {
         let mut txn3 = khonsu.start_transaction();
         let txn3_id = txn3.id();
         let record_batch_tx3 = create_basic_record_batch(schema.clone(), vec!["key1"], vec![600]);
-        txn3.write("key1".to_string(), record_batch_tx3.clone()).unwrap(); // Clone batch for later assert
+        txn3.write("key1".to_string(), record_batch_tx3.clone())
+            .unwrap(); // Clone batch for later assert
         println!("Tx3 ({}) wrote key1", txn3_id);
 
         // Commit Tx3 (should succeed if dependencies were removed)

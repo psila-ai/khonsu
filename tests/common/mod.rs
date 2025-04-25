@@ -5,7 +5,9 @@ use arrow::array::{Int64Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use khonsu::{
-    conflict::resolution::ConflictResolution, errors::Result, storage::{Storage, StorageMutation},
+    conflict::resolution::ConflictResolution,
+    errors::Result,
+    storage::{Storage, StorageMutation},
     Khonsu, TransactionIsolation,
 };
 use std::sync::{Arc, Mutex};

@@ -85,16 +85,23 @@ impl DependencyTracker {
 
     /// Marks a transaction as Committed. Stores write set keys for recent commits.
     pub fn mark_committed(&self, txn_id: u64, commit_ts: u64, write_set_keys: HashSet<String>) {
-        let found = { // Scope the write lock
+        let found = {
+            // Scope the write lock
             let mut transactions_guard = self.transactions.write();
             if let Some(info) = transactions_guard.get_mut(&txn_id) {
                 info.state = TxnState::Committed;
                 info.commit_ts = Some(commit_ts);
                 info.write_set_keys = Some(write_set_keys); // Store write set for recent commits
-                println!("Marked Tx {} as Committed (CommitTS: {})", txn_id, commit_ts);
+                println!(
+                    "Marked Tx {} as Committed (CommitTS: {})",
+                    txn_id, commit_ts
+                );
                 true
             } else {
-                println!("Warning: Tx {} not found in tracker to mark as Committed.", txn_id);
+                println!(
+                    "Warning: Tx {} not found in tracker to mark as Committed.",
+                    txn_id
+                );
                 false
             }
             // transactions_guard lock is released here
@@ -108,7 +115,8 @@ impl DependencyTracker {
 
     /// Marks a transaction as Aborted.
     pub fn mark_aborted(&self, txn_id: u64) {
-         let found = { // Scope the write lock
+        let found = {
+            // Scope the write lock
             let mut transactions_guard = self.transactions.write();
             if let Some(info) = transactions_guard.get_mut(&txn_id) {
                 info.state = TxnState::Aborted;
@@ -116,8 +124,11 @@ impl DependencyTracker {
                 println!("Marked Tx {} as Aborted", txn_id);
                 true
             } else {
-                 println!("Warning: Tx {} not found in tracker to mark as Aborted.", txn_id);
-                 false
+                println!(
+                    "Warning: Tx {} not found in tracker to mark as Aborted.",
+                    txn_id
+                );
+                false
             }
             // transactions_guard lock is released here
         };
@@ -128,10 +139,14 @@ impl DependencyTracker {
         self.maybe_trigger_cleanup();
     }
 
-
     /// Records that an *active* transaction read a data item at a specific version.
     pub fn record_read(&self, reader_id: u64, data_item: DataItem, read_version: u64) {
-        if self.transactions.read().get(&reader_id).map_or(false, |info| info.state == TxnState::Active) {
+        if self
+            .transactions
+            .read()
+            .get(&reader_id)
+            .map_or(false, |info| info.state == TxnState::Active)
+        {
             let mut item_deps = self.item_dependencies.write();
             let item_dep = item_deps
                 .entry(data_item.key.clone())
@@ -146,7 +161,12 @@ impl DependencyTracker {
 
     /// Records that an *active* transaction intends to write to a data item.
     pub fn record_write(&self, writer_id: u64, data_item: DataItem, _write_version: u64) {
-         if self.transactions.read().get(&writer_id).map_or(false, |info| info.state == TxnState::Active) {
+        if self
+            .transactions
+            .read()
+            .get(&writer_id)
+            .map_or(false, |info| info.state == TxnState::Active)
+        {
             let mut item_deps = self.item_dependencies.write();
             let item_dep = item_deps
                 .entry(data_item.key.clone())
@@ -165,61 +185,67 @@ impl DependencyTracker {
         committing_tx_id: u64,
         _commit_ts: u64, // commit_ts is not strictly needed for basic SI backward check
         read_set: &HashMap<String, u64>, // Read set of the committing transaction
-        write_set: &HashSet<String>,     // Write set of the committing transaction
+        write_set: &HashSet<String>, // Write set of the committing transaction
         txn_buffer: &TxnBuffer, // Need buffer for backward validation
     ) -> Result<bool> {
         println!("Starting SSI validation for Tx {}", committing_tx_id);
         let transactions_read_lock = self.transactions.read();
 
         let start_ts = match transactions_read_lock.get(&committing_tx_id) {
-             Some(info) if info.state == TxnState::Active => info.start_ts,
-             _ => {
-                 println!("Error: Committing Tx {} not found or not active.", committing_tx_id);
-                 return Ok(false); // Cannot validate non-active transaction
-             }
-         };
+            Some(info) if info.state == TxnState::Active => info.start_ts,
+            _ => {
+                println!(
+                    "Error: Committing Tx {} not found or not active.",
+                    committing_tx_id
+                );
+                return Ok(false); // Cannot validate non-active transaction
+            }
+        };
 
         // --- Backward Validation ---
         // 1. SI Read Check: Check if any item read by T_commit was overwritten by a transaction T_other
         //    that committed *after* T_commit started.
         for (key, read_version) in read_set {
             if let Some(current_value) = txn_buffer.get(key) {
-                 if current_value.version() > *read_version {
-                     let writer_commit_ts = current_value.version();
-                     if writer_commit_ts > start_ts {
-                          println!("SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
+                if current_value.version() > *read_version {
+                    let writer_commit_ts = current_value.version();
+                    if writer_commit_ts > start_ts {
+                        println!("SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
                                    committing_tx_id, key, read_version, writer_commit_ts, writer_commit_ts, writer_commit_ts);
-                          return Ok(false);
-                     }
-                 }
+                        return Ok(false);
+                    }
+                }
             } else {
-                 // Item we read was deleted. Conflict if deletion committed after we started.
-                 if *read_version > 0 { // Heuristic: If we read version > 0, it existed
-                     println!("SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
+                // Item we read was deleted. Conflict if deletion committed after we started.
+                if *read_version > 0 {
+                    // Heuristic: If we read version > 0, it existed
+                    println!("SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
                               committing_tx_id, key, read_version);
-                     return Ok(false);
-                 }
+                    return Ok(false);
+                }
             }
         }
 
         // 2. WW Check: Check if any item written by T_commit was also written by a transaction T_other
         //    that committed *after* T_commit started.
         for key in write_set {
-             if let Some(current_value) = txn_buffer.get(key) {
-                 let writer_commit_ts = current_value.version();
-                 println!("  SSI WW Check: Key='{}', CommittingTx={}, StartTs={}, BufferVersion={}", key, committing_tx_id, start_ts, writer_commit_ts); // ADDED LOG
-                 // Conflict if writer committed after we started.
-                 if writer_commit_ts > start_ts {
-                      println!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
+            if let Some(current_value) = txn_buffer.get(key) {
+                let writer_commit_ts = current_value.version();
+                println!(
+                    "  SSI WW Check: Key='{}', CommittingTx={}, StartTs={}, BufferVersion={}",
+                    key, committing_tx_id, start_ts, writer_commit_ts
+                ); // ADDED LOG
+                   // Conflict if writer committed after we started.
+                if writer_commit_ts > start_ts {
+                    println!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
                                committing_tx_id, key, writer_commit_ts, writer_commit_ts, writer_commit_ts);
-                      return Ok(false);
-                 }
-             }
-             // If current_value is None, it means either the key never existed or was deleted.
-             // An insert by T_commit is okay. A write/delete by T_commit on a deleted item
-             // might conflict if the deletion happened after start_ts, but needs deletion tracking.
+                    return Ok(false);
+                }
+            }
+            // If current_value is None, it means either the key never existed or was deleted.
+            // An insert by T_commit is okay. A write/delete by T_commit on a deleted item
+            // might conflict if the deletion happened after start_ts, but needs deletion tracking.
         }
-
 
         // --- Forward Validation (RW-Dependency Check) ---
         let item_deps_read_lock = self.item_dependencies.read();
@@ -231,67 +257,87 @@ impl DependencyTracker {
             if let Some(dep) = item_deps_read_lock.get(write_key) {
                 for reader_id in dep.readers.keys() {
                     if *reader_id != committing_tx_id {
-                         if transactions_read_lock.get(reader_id).map_or(false, |info| info.state == TxnState::Active) {
+                        if transactions_read_lock
+                            .get(reader_id)
+                            .map_or(false, |info| info.state == TxnState::Active)
+                        {
                             println!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
                             has_outgoing_rw_edge = true;
-                            if has_incoming_rw_edge { break; } // Optimization
-                         }
+                            if has_incoming_rw_edge {
+                                break;
+                            } // Optimization
+                        }
                     }
                 }
-                 if has_outgoing_rw_edge && has_incoming_rw_edge { break; } // Optimization
+                if has_outgoing_rw_edge && has_incoming_rw_edge {
+                    break;
+                } // Optimization
             }
         }
 
         // Check for incoming edges: T_commit reads x, T_concurrent writes x
         // T_concurrent can be Active or Committed (after T_commit started)
-        if !(has_outgoing_rw_edge && has_incoming_rw_edge) { // Skip if already found dangerous structure
+        if !(has_outgoing_rw_edge && has_incoming_rw_edge) {
+            // Skip if already found dangerous structure
             for read_key in read_set.keys() {
-                 // Check active writers
-                 if let Some(dep) = item_deps_read_lock.get(read_key) {
-                     for writer_id in &dep.writers {
-                         if *writer_id != committing_tx_id {
-                             if transactions_read_lock.get(writer_id).map_or(false, |info| info.state == TxnState::Active) {
-                                 println!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
-                                 has_incoming_rw_edge = true;
-                                 if has_outgoing_rw_edge { break; } // Optimization
-                             }
-                         }
-                     }
-                 }
-                 if has_outgoing_rw_edge && has_incoming_rw_edge { break; } // Optimization
+                // Check active writers
+                if let Some(dep) = item_deps_read_lock.get(read_key) {
+                    for writer_id in &dep.writers {
+                        if *writer_id != committing_tx_id {
+                            if transactions_read_lock
+                                .get(writer_id)
+                                .map_or(false, |info| info.state == TxnState::Active)
+                            {
+                                println!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
+                                has_incoming_rw_edge = true;
+                                if has_outgoing_rw_edge {
+                                    break;
+                                } // Optimization
+                            }
+                        }
+                    }
+                }
+                if has_outgoing_rw_edge && has_incoming_rw_edge {
+                    break;
+                } // Optimization
 
-                 // Check committed writers (after T_commit started)
-                 for (other_txn_id, other_info) in transactions_read_lock.iter() {
-                     if *other_txn_id != committing_tx_id &&
-                        other_info.state == TxnState::Committed &&
-                        other_info.commit_ts.unwrap_or(0) > start_ts
-                     {
-                         if let Some(ref committed_write_set) = other_info.write_set_keys {
-                             if committed_write_set.contains(read_key) {
-                                 println!("SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'", other_txn_id, committing_tx_id, read_key);
-                                 has_incoming_rw_edge = true;
-                                 if has_outgoing_rw_edge { break; } // Optimization
-                             }
-                         }
-                     }
-                 }
-                 if has_outgoing_rw_edge && has_incoming_rw_edge { break; } // Optimization
+                // Check committed writers (after T_commit started)
+                for (other_txn_id, other_info) in transactions_read_lock.iter() {
+                    if *other_txn_id != committing_tx_id
+                        && other_info.state == TxnState::Committed
+                        && other_info.commit_ts.unwrap_or(0) > start_ts
+                    {
+                        if let Some(ref committed_write_set) = other_info.write_set_keys {
+                            if committed_write_set.contains(read_key) {
+                                println!("SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'", other_txn_id, committing_tx_id, read_key);
+                                has_incoming_rw_edge = true;
+                                if has_outgoing_rw_edge {
+                                    break;
+                                } // Optimization
+                            }
+                        }
+                    }
+                }
+                if has_outgoing_rw_edge && has_incoming_rw_edge {
+                    break;
+                } // Optimization
             }
         }
         drop(item_deps_read_lock);
         drop(transactions_read_lock); // Drop the lock now
 
-
         // Check for dangerous structure (SIREAD + PREAD conflict)
         if has_incoming_rw_edge && has_outgoing_rw_edge {
-            println!("SSI Forward Validation Failed: Dangerous RW structure detected for Tx {}", committing_tx_id);
+            println!(
+                "SSI Forward Validation Failed: Dangerous RW structure detected for Tx {}",
+                committing_tx_id
+            );
             return Ok(false);
         }
 
         println!("SSI validation successful for Tx {}", committing_tx_id);
         Ok(true)
     }
-
 
     /// Removes a transaction's read/write entries from the item_dependencies map.
     /// Called after commit or abort.
@@ -318,11 +364,11 @@ impl DependencyTracker {
 
     /// Periodically checks and removes old transaction info.
     fn maybe_trigger_cleanup(&self) {
-         let count = self.cleanup_counter.fetch_add(1, Ordering::Relaxed);
-         if count >= self.cleanup_threshold {
-             self.cleanup_counter.store(0, Ordering::Relaxed); // Reset counter
-             self.cleanup_old_txns();
-         }
+        let count = self.cleanup_counter.fetch_add(1, Ordering::Relaxed);
+        if count >= self.cleanup_threshold {
+            self.cleanup_counter.store(0, Ordering::Relaxed); // Reset counter
+            self.cleanup_old_txns();
+        }
     }
 
     /// Removes info for transactions older than max_txn_age.
@@ -332,7 +378,9 @@ impl DependencyTracker {
         let initial_count = transactions.len();
         transactions.retain(|_tx_id, info| {
             // Keep Active transactions and recently Committed/Aborted ones
-            if info.state != TxnState::Active && now.duration_since(info.creation_time) >= self.max_txn_age {
+            if info.state != TxnState::Active
+                && now.duration_since(info.creation_time) >= self.max_txn_age
+            {
                 return false; // Remove old committed/aborted info entirely
             }
             true // Keep active and recent committed/aborted

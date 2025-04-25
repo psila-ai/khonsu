@@ -148,8 +148,10 @@ pub fn merge_record_batches(
         .map(|mut builder| builder.finish())
         .collect();
 
-    let result_record_batch = RecordBatch::try_new(target_schema.clone(), final_arrays)
-        .map_err(|e| KhonsuError::ArrowError(format!("Failed to create result RecordBatch: {}", e)))?;
+    let result_record_batch =
+        RecordBatch::try_new(target_schema.clone(), final_arrays).map_err(|e| {
+            KhonsuError::ArrowError(format!("Failed to create result RecordBatch: {}", e))
+        })?;
 
     Ok(result_record_batch)
 }
@@ -179,13 +181,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<StringBuilder>() // Use StringBuilder
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast builder to StringBuilder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to StringBuilder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<StringArray>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast source array to StringArray".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to StringArray".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -196,13 +202,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<Int64Builder>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast builder to Int64Builder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to Int64Builder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<Int64Array>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast source array to Int64Array".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to Int64Array".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -214,13 +224,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<Float64Builder>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast builder to Float64Builder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to Float64Builder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<Float64Array>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast source array to Float64Array".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to Float64Array".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);
@@ -232,13 +246,17 @@ fn append_value(
                 .as_any_mut()
                 .downcast_mut::<BooleanBuilder>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast builder to BooleanBuilder".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast builder to BooleanBuilder".to_string(),
+                    )
                 })?;
             let source_array = source_array
                 .as_any()
                 .downcast_ref::<BooleanArray>()
                 .ok_or_else(|| {
-                    KhonsuError::ArrowError("Failed to downcast source array to BooleanArray".to_string())
+                    KhonsuError::ArrowError(
+                        "Failed to downcast source array to BooleanArray".to_string(),
+                    )
                 })?;
 
             let value = source_array.value(source_row_index);

@@ -5,10 +5,9 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 
 // Use khonsu:: prefix for library items
-use khonsu::{Khonsu, TransactionIsolation, KhonsuError};
+use khonsu::{Khonsu, KhonsuError, TransactionIsolation};
 // Use common:: prefix for shared test utilities (since `mod common;` is declared above)
-use common::{setup_khonsu, create_record_batch};
-
+use common::{create_record_batch, setup_khonsu};
 
 #[test]
 fn test_serializable_rw_conflict_interleaved() {
@@ -25,7 +24,9 @@ fn test_serializable_rw_conflict_interleaved() {
     // 1. Initial data setup
     let initial_batch = create_record_batch(vec![1], vec![Some("initial")]);
     let mut setup_txn = khonsu_arc.start_transaction();
-    setup_txn.write("key1".to_string(), initial_batch.clone()).unwrap();
+    setup_txn
+        .write("key1".to_string(), initial_batch.clone())
+        .unwrap();
     setup_txn.commit().unwrap();
     println!("Initial data committed.");
 
@@ -40,7 +41,8 @@ fn test_serializable_rw_conflict_interleaved() {
     let khonsu_tx2 = khonsu_arc.clone();
 
     // Thread 1 (Tx1 - Reader)
-    let handle1 = thread::spawn(move || { // barrier_tx1 is moved here
+    let handle1 = thread::spawn(move || {
+        // barrier_tx1 is moved here
         let mut txn1 = khonsu_tx1.start_transaction();
         let txn1_id = txn1.id();
         println!("Tx1 ({}) started.", txn1_id);
@@ -70,13 +72,17 @@ fn test_serializable_rw_conflict_interleaved() {
         // Assert Tx1 commit failed due to TransactionConflict (SSI backward validation)
         assert!(commit_result.is_err());
         match commit_result.err().unwrap() {
-            KhonsuError::TransactionConflict => println!("Tx1 ({}) correctly failed with TransactionConflict.", txn1_id),
+            KhonsuError::TransactionConflict => println!(
+                "Tx1 ({}) correctly failed with TransactionConflict.",
+                txn1_id
+            ),
             e => panic!("Tx1 ({}) failed with unexpected error: {:?}", txn1_id, e),
         }
     });
 
     // Thread 2 (Tx2 - Writer)
-    let handle2 = thread::spawn(move || { // barrier_tx2 is moved here
+    let handle2 = thread::spawn(move || {
+        // barrier_tx2 is moved here
         // Wait for Tx1 to read
         println!("Tx2 waiting at Barrier 1.");
         barrier_tx2.wait(); // Use barrier_tx2 here
@@ -113,10 +119,12 @@ fn test_serializable_rw_conflict_interleaved() {
     // Verify final state in storage (should be Tx2's write)
     let mut final_read_txn = khonsu_arc.start_transaction();
     let final_read_result = final_read_txn.read(&"key1".to_string()).unwrap().unwrap();
-    assert_eq!(*final_read_result, final_batch_from_tx2, "Final data in storage is incorrect");
+    assert_eq!(
+        *final_read_result, final_batch_from_tx2,
+        "Final data in storage is incorrect"
+    );
     println!("Final data verified in storage.");
 }
-
 
 #[test]
 fn test_serializable_ww_conflict_interleaved() {
@@ -131,10 +139,11 @@ fn test_serializable_ww_conflict_interleaved() {
     // Optional: Initial data setup (can also start empty)
     let initial_batch = create_record_batch(vec![1], vec![Some("initial_ww")]);
     let mut setup_txn = khonsu_arc.start_transaction();
-    setup_txn.write("key1_ww".to_string(), initial_batch.clone()).unwrap();
+    setup_txn
+        .write("key1_ww".to_string(), initial_batch.clone())
+        .unwrap();
     setup_txn.commit().unwrap();
     println!("Initial WW data committed.");
-
 
     let barrier = Arc::new(Barrier::new(2)); // Barrier for 2 threads
 
@@ -154,7 +163,8 @@ fn test_serializable_ww_conflict_interleaved() {
 
         // Write new data
         let write_batch_tx1 = create_record_batch(vec![1], vec![Some("updated_by_tx1_ww")]);
-        txn1.write("key1_ww".to_string(), write_batch_tx1.clone()).unwrap();
+        txn1.write("key1_ww".to_string(), write_batch_tx1.clone())
+            .unwrap();
         println!("Tx1-WW ({}) wrote key1_ww.", txn1_id);
 
         // Wait for Tx2 to start and write
@@ -171,10 +181,13 @@ fn test_serializable_ww_conflict_interleaved() {
         println!("Tx1-WW ({}) attempting commit.", txn1_id);
         let commit_result = txn1.commit();
         println!("Tx1-WW ({:?}) commit result: {:?}", commit_result, txn1_id); // Ensure {:?} is used
-        // Assert Tx1 commit failed due to TransactionConflict
+                                                                               // Assert Tx1 commit failed due to TransactionConflict
         assert!(commit_result.is_err(), "Tx1-WW commit should have failed");
         match commit_result.err().unwrap() {
-            KhonsuError::TransactionConflict => println!("Tx1-WW ({}) correctly failed with TransactionConflict.", txn1_id),
+            KhonsuError::TransactionConflict => println!(
+                "Tx1-WW ({}) correctly failed with TransactionConflict.",
+                txn1_id
+            ),
             e => panic!("Tx1-WW ({}) failed with unexpected error: {:?}", txn1_id, e),
         }
         // Don't return the batch as it wasn't committed
@@ -193,7 +206,8 @@ fn test_serializable_ww_conflict_interleaved() {
 
         // Write different data
         let write_batch_tx2 = create_record_batch(vec![1], vec![Some("updated_by_tx2_ww")]);
-        txn2.write("key1_ww".to_string(), write_batch_tx2.clone()).unwrap();
+        txn2.write("key1_ww".to_string(), write_batch_tx2.clone())
+            .unwrap();
         println!("Tx2-WW ({}) wrote key1_ww.", txn2_id);
 
         // Attempt to commit Tx2 (should fail due to WW conflict with Tx1)
@@ -202,7 +216,10 @@ fn test_serializable_ww_conflict_interleaved() {
         println!("Tx2-WW ({:?}) commit result: {:?}", commit_result, txn2_id); // Already correct {:?}
 
         // Signal Tx1 to proceed (regardless of commit outcome)
-        println!("Tx2-WW ({}) waiting at Barrier 2 (after commit attempt).", txn2_id);
+        println!(
+            "Tx2-WW ({}) waiting at Barrier 2 (after commit attempt).",
+            txn2_id
+        );
         barrier_tx2.wait();
         println!("Tx2-WW ({}) passed Barrier 2.", txn2_id);
 
@@ -218,14 +235,18 @@ fn test_serializable_ww_conflict_interleaved() {
     // Get the batch committed by Tx2
     let final_batch_from_tx2 = handle2.join().expect("Thread 2 panicked");
 
-
     // Verify final state in storage (should be Tx2's write, as Tx1 failed)
     let mut final_read_txn = khonsu_arc.start_transaction();
-    let final_read_result = final_read_txn.read(&"key1_ww".to_string()).unwrap().unwrap();
-    assert_eq!(*final_read_result, final_batch_from_tx2, "Final data in storage is incorrect (should be Tx2's write)");
+    let final_read_result = final_read_txn
+        .read(&"key1_ww".to_string())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        *final_read_result, final_batch_from_tx2,
+        "Final data in storage is incorrect (should be Tx2's write)"
+    );
     println!("Final WW data verified in storage.");
 }
-
 
 #[test]
 fn test_serializable_wr_conflict_interleaved() {
@@ -240,7 +261,9 @@ fn test_serializable_wr_conflict_interleaved() {
     // Initial data setup
     let initial_batch = create_record_batch(vec![1], vec![Some("initial_wr")]);
     let mut setup_txn = khonsu_arc.start_transaction();
-    setup_txn.write("key1_wr".to_string(), initial_batch.clone()).unwrap();
+    setup_txn
+        .write("key1_wr".to_string(), initial_batch.clone())
+        .unwrap();
     setup_txn.commit().unwrap();
     println!("Initial WR data committed.");
 
@@ -256,14 +279,16 @@ fn test_serializable_wr_conflict_interleaved() {
     let khonsu_tx2 = khonsu_arc.clone();
 
     // Thread 1 (Tx1 - Writer)
-    let handle1 = thread::spawn(move || { // barrier_tx1 moved here
+    let handle1 = thread::spawn(move || {
+        // barrier_tx1 moved here
         let mut txn1 = khonsu_tx1.start_transaction();
         let txn1_id = txn1.id();
         println!("Tx1-WR ({}) started.", txn1_id);
 
         // Write new data
         let write_batch_tx1 = create_record_batch(vec![1], vec![Some("updated_by_tx1_wr")]);
-        txn1.write("key1_wr".to_string(), write_batch_tx1.clone()).unwrap();
+        txn1.write("key1_wr".to_string(), write_batch_tx1.clone())
+            .unwrap();
         println!("Tx1-WR ({}) wrote key1_wr.", txn1_id);
 
         // Wait for Tx2 to start (Sync Point 1)
@@ -292,7 +317,8 @@ fn test_serializable_wr_conflict_interleaved() {
     });
 
     // Thread 2 (Tx2 - Reader)
-    let handle2 = thread::spawn(move || { // barrier_tx2 moved here
+    let handle2 = thread::spawn(move || {
+        // barrier_tx2 moved here
         // Wait for Tx1 to write (Sync Point 1)
         println!("Tx2-WR waiting at Barrier 1.");
         barrier_tx2.wait();
@@ -304,10 +330,13 @@ fn test_serializable_wr_conflict_interleaved() {
 
         // Read data (should see initial value as Tx1 hasn't committed yet)
         let read_result = txn2.read(&"key1_wr".to_string());
-         println!("Tx2-WR ({}) read key1_wr.", txn2_id);
+        println!("Tx2-WR ({}) read key1_wr.", txn2_id);
         assert!(read_result.is_ok(), "Tx2-WR read failed");
         let read_batch = read_result.unwrap().expect("Tx2-WR should find key1_wr");
-        assert_eq!(*read_batch, initial_batch, "Tx2-WR read wrong initial value");
+        assert_eq!(
+            *read_batch, initial_batch,
+            "Tx2-WR read wrong initial value"
+        );
 
         // Signal Tx1 that read is complete (Sync Point 2)
         println!("Tx2-WR ({}) waiting at Barrier 2 (after read).", txn2_id);
@@ -327,7 +356,10 @@ fn test_serializable_wr_conflict_interleaved() {
         // Assert Tx2 commit failed due to TransactionConflict (SSI backward validation)
         assert!(commit_result.is_err());
         match commit_result.err().unwrap() {
-            KhonsuError::TransactionConflict => println!("Tx2-WR ({}) correctly failed with TransactionConflict.", txn2_id),
+            KhonsuError::TransactionConflict => println!(
+                "Tx2-WR ({}) correctly failed with TransactionConflict.",
+                txn2_id
+            ),
             e => panic!("Tx2-WR ({}) failed with unexpected error: {:?}", txn2_id, e),
         }
     });
@@ -338,11 +370,16 @@ fn test_serializable_wr_conflict_interleaved() {
 
     // Verify final state in storage (should be Tx1's write)
     let mut final_read_txn = khonsu_arc.start_transaction();
-    let final_read_result = final_read_txn.read(&"key1_wr".to_string()).unwrap().unwrap();
-    assert_eq!(*final_read_result, final_batch_from_tx1, "Final data in storage is incorrect (should be Tx1's write)");
+    let final_read_result = final_read_txn
+        .read(&"key1_wr".to_string())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        *final_read_result, final_batch_from_tx1,
+        "Final data in storage is incorrect (should be Tx1's write)"
+    );
     println!("Final WR data verified in storage.");
 }
-
 
 #[test]
 fn test_serializable_multi_key_rw_cycle_interleaved() {
@@ -359,8 +396,12 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
     let initial_batch_a = create_record_batch(vec![1], vec![Some("initial_a")]);
     let initial_batch_b = create_record_batch(vec![2], vec![Some("initial_b")]); // Use different ID/value for clarity
     let mut setup_txn = khonsu_arc.start_transaction();
-    setup_txn.write("key_a".to_string(), initial_batch_a.clone()).unwrap();
-    setup_txn.write("key_b".to_string(), initial_batch_b.clone()).unwrap();
+    setup_txn
+        .write("key_a".to_string(), initial_batch_a.clone())
+        .unwrap();
+    setup_txn
+        .write("key_b".to_string(), initial_batch_b.clone())
+        .unwrap();
     setup_txn.commit().unwrap();
     println!("Initial RW-Cycle data committed.");
 
@@ -386,7 +427,10 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
         println!("Tx1-Cycle ({}) read key_a.", txn1_id);
         assert!(read_result_a.is_ok(), "Tx1-Cycle read key_a failed");
         let read_batch_a = read_result_a.unwrap().expect("Tx1-Cycle should find key_a");
-        assert_eq!(*read_batch_a, iba, "Tx1-Cycle read wrong initial value for key_a");
+        assert_eq!(
+            *read_batch_a, iba,
+            "Tx1-Cycle read wrong initial value for key_a"
+        );
 
         // Wait for Tx2 to start and read key_b
         println!("Tx1-Cycle ({}) waiting at Barrier 1.", txn1_id);
@@ -395,7 +439,8 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
 
         // Write key_b
         let write_batch_b_tx1 = create_record_batch(vec![2], vec![Some("updated_b_by_tx1")]);
-        txn1.write("key_b".to_string(), write_batch_b_tx1.clone()).unwrap();
+        txn1.write("key_b".to_string(), write_batch_b_tx1.clone())
+            .unwrap();
         println!("Tx1-Cycle ({}) wrote key_b.", txn1_id);
 
         // Wait for Tx2 to write key_a
@@ -406,12 +451,14 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
         // Attempt to commit Tx1 (might succeed or fail depending on exact timing vs Tx2 commit attempt)
         println!("Tx1-Cycle ({}) attempting commit.", txn1_id);
         let commit_result = txn1.commit();
-        println!("Tx1-Cycle ({:?}) commit result: {:?}", commit_result, txn1_id);
+        println!(
+            "Tx1-Cycle ({:?}) commit result: {:?}",
+            commit_result, txn1_id
+        );
 
         // Return result and potentially committed batch
         (commit_result, write_batch_b_tx1)
     });
-
 
     let ibb = initial_batch_b.clone();
     // Thread 2 (Tx2: R(b) -> W(a))
@@ -430,7 +477,10 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
         println!("Tx2-Cycle ({}) read key_b.", txn2_id);
         assert!(read_result_b.is_ok(), "Tx2-Cycle read key_b failed");
         let read_batch_b = read_result_b.unwrap().expect("Tx2-Cycle should find key_b");
-        assert_eq!(*read_batch_b, ibb, "Tx2-Cycle read wrong initial value for key_b");
+        assert_eq!(
+            *read_batch_b, ibb,
+            "Tx2-Cycle read wrong initial value for key_b"
+        );
 
         // Wait for Tx1 to write key_b
         println!("Tx2-Cycle ({}) waiting at Barrier 2.", txn2_id);
@@ -439,13 +489,17 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
 
         // Write key_a
         let write_batch_a_tx2 = create_record_batch(vec![1], vec![Some("updated_a_by_tx2")]);
-        txn2.write("key_a".to_string(), write_batch_a_tx2.clone()).unwrap();
+        txn2.write("key_a".to_string(), write_batch_a_tx2.clone())
+            .unwrap();
         println!("Tx2-Cycle ({}) wrote key_a.", txn2_id);
 
         // Attempt to commit Tx2 (might succeed or fail depending on exact timing vs Tx1 commit attempt)
         println!("Tx2-Cycle ({}) attempting commit.", txn2_id);
         let commit_result = txn2.commit();
-        println!("Tx2-Cycle ({:?}) commit result: {:?}", commit_result, txn2_id);
+        println!(
+            "Tx2-Cycle ({:?}) commit result: {:?}",
+            commit_result, txn2_id
+        );
 
         // Return result and potentially committed batch
         (commit_result, write_batch_a_tx2)
@@ -456,7 +510,10 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
     let (result2, batch2) = handle2.join().expect("Thread 2 panicked");
 
     // Assert that AT LEAST ONE transaction failed due to conflict
-    assert!(result1.is_err() || result2.is_err(), "At least one transaction should have failed due to RW cycle conflict");
+    assert!(
+        result1.is_err() || result2.is_err(),
+        "At least one transaction should have failed due to RW cycle conflict"
+    );
 
     // Verify the final state based on which transaction(s) failed
     let mut final_read_txn = khonsu_arc.start_transaction();
@@ -467,22 +524,34 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
         (false, true) => {
             // Tx1 failed, Tx2 succeeded
             println!("Tx1-Cycle failed, Tx2-Cycle succeeded (as expected in one outcome).");
-            assert!(matches!(result1.err().unwrap(), KhonsuError::TransactionConflict));
+            assert!(matches!(
+                result1.err().unwrap(),
+                KhonsuError::TransactionConflict
+            ));
             assert_eq!(*final_a, batch2, "Final key_a should be from Tx2");
             assert_eq!(*final_b, initial_batch_b, "Final key_b should be initial");
         }
         (true, false) => {
             // Tx1 succeeded, Tx2 failed
             println!("Tx1-Cycle succeeded, Tx2-Cycle failed (as expected in another outcome).");
-             assert!(matches!(result2.err().unwrap(), KhonsuError::TransactionConflict));
+            assert!(matches!(
+                result2.err().unwrap(),
+                KhonsuError::TransactionConflict
+            ));
             assert_eq!(*final_a, initial_batch_a, "Final key_a should be initial");
             assert_eq!(*final_b, batch1, "Final key_b should be from Tx1");
         }
         (false, false) => {
             // Both failed (also a valid outcome for cycle detection)
             println!("Both Tx1-Cycle and Tx2-Cycle failed (valid outcome).");
-            assert!(matches!(result1.err().unwrap(), KhonsuError::TransactionConflict));
-            assert!(matches!(result2.err().unwrap(), KhonsuError::TransactionConflict));
+            assert!(matches!(
+                result1.err().unwrap(),
+                KhonsuError::TransactionConflict
+            ));
+            assert!(matches!(
+                result2.err().unwrap(),
+                KhonsuError::TransactionConflict
+            ));
             assert_eq!(*final_a, initial_batch_a, "Final key_a should be initial");
             assert_eq!(*final_b, initial_batch_b, "Final key_b should be initial");
         }
@@ -494,7 +563,6 @@ fn test_serializable_multi_key_rw_cycle_interleaved() {
 
     println!("Final RW-Cycle data verified in storage.");
 }
-
 
 #[test]
 fn test_serializable_ssi_forward_validation_interleaved() {
@@ -513,8 +581,12 @@ fn test_serializable_ssi_forward_validation_interleaved() {
     let initial_batch_x = create_record_batch(vec![10], vec![Some("initial_x")]);
     let initial_batch_y = create_record_batch(vec![20], vec![Some("initial_y")]);
     let mut setup_txn = khonsu_arc.start_transaction();
-    setup_txn.write("key_x".to_string(), initial_batch_x.clone()).unwrap();
-    setup_txn.write("key_y".to_string(), initial_batch_y.clone()).unwrap();
+    setup_txn
+        .write("key_x".to_string(), initial_batch_x.clone())
+        .unwrap();
+    setup_txn
+        .write("key_y".to_string(), initial_batch_y.clone())
+        .unwrap();
     setup_txn.commit().unwrap();
     println!("Initial SSI-Fwd data committed.");
 
@@ -557,7 +629,8 @@ fn test_serializable_ssi_forward_validation_interleaved() {
 
         // Write key_y (conditionally based on read of x)
         let write_batch_y_tx1 = create_record_batch(vec![20], vec![Some("updated_y_by_tx1")]);
-        txn1.write("key_y".to_string(), write_batch_y_tx1.clone()).unwrap();
+        txn1.write("key_y".to_string(), write_batch_y_tx1.clone())
+            .unwrap();
         println!("Tx1-Fwd ({}) wrote key_y.", txn1_id);
 
         // Wait for Tx3 to start and read key_y
@@ -573,8 +646,14 @@ fn test_serializable_ssi_forward_validation_interleaved() {
         // Assert Tx1 commit failed due to TransactionConflict (SSI Forward Validation)
         assert!(commit_result.is_err());
         match commit_result.err().unwrap() {
-            KhonsuError::TransactionConflict => println!("Tx1-Fwd ({}) correctly failed with TransactionConflict (Forward Validation).", txn1_id),
-            e => panic!("Tx1-Fwd ({}) failed with unexpected error: {:?}", txn1_id, e),
+            KhonsuError::TransactionConflict => println!(
+                "Tx1-Fwd ({}) correctly failed with TransactionConflict (Forward Validation).",
+                txn1_id
+            ),
+            e => panic!(
+                "Tx1-Fwd ({}) failed with unexpected error: {:?}",
+                txn1_id, e
+            ),
         }
     });
 
@@ -591,7 +670,8 @@ fn test_serializable_ssi_forward_validation_interleaved() {
 
         // Write key_x
         let write_batch_x_tx2 = create_record_batch(vec![10], vec![Some("updated_x_by_tx2")]);
-        txn2.write("key_x".to_string(), write_batch_x_tx2.clone()).unwrap();
+        txn2.write("key_x".to_string(), write_batch_x_tx2.clone())
+            .unwrap();
         println!("Tx2-Fwd ({}) wrote key_x.", txn2_id);
 
         // Attempt to commit Tx2 (should succeed)
@@ -616,18 +696,17 @@ fn test_serializable_ssi_forward_validation_interleaved() {
 
     // Thread 3 (Tx3: R(y))
     let handle3 = thread::spawn(move || {
-         // Wait for Tx1 and Tx2 to pass Barrier 2 (Tx2 committed, Tx1 wrote y)
-        println!("Tx3-Fwd waiting at Barrier 1.", ); // No wait needed here
+        // Wait for Tx1 and Tx2 to pass Barrier 2 (Tx2 committed, Tx1 wrote y)
+        println!("Tx3-Fwd waiting at Barrier 1.",); // No wait needed here
         barrier_tx3.wait(); // Sync point 1
-        println!("Tx3-Fwd passed Barrier 1.", );
+        println!("Tx3-Fwd passed Barrier 1.",);
         barrier_tx3.wait(); // Sync point 2
-        println!("Tx3-Fwd passed Barrier 2.", );
-
+        println!("Tx3-Fwd passed Barrier 2.",);
 
         // Wait for Tx1 to write key_y (but before Tx1 commit attempt)
-        println!("Tx3-Fwd waiting at Barrier 3.", );
+        println!("Tx3-Fwd waiting at Barrier 3.",);
         barrier_tx3.wait();
-        println!("Tx3-Fwd passed Barrier 3.", );
+        println!("Tx3-Fwd passed Barrier 3.",);
 
         let mut txn3 = khonsu_tx3.start_transaction();
         let txn3_id = txn3.id();
@@ -645,15 +724,12 @@ fn test_serializable_ssi_forward_validation_interleaved() {
         let commit_result = txn3.commit();
         println!("Tx3-Fwd ({:?}) commit result: {:?}", commit_result, txn3_id);
         assert!(commit_result.is_ok(), "Tx3-Fwd commit failed unexpectedly");
-
     });
-
 
     // Wait for threads to complete
     handle1.join().expect("Thread 1 panicked");
     let final_batch_x = handle2.join().expect("Thread 2 panicked");
     handle3.join().expect("Thread 3 panicked");
-
 
     // Verify final state in storage
     // Tx1 aborted, Tx2 committed, Tx3 committed.
@@ -663,7 +739,10 @@ fn test_serializable_ssi_forward_validation_interleaved() {
     let final_x = final_read_txn.read(&"key_x".to_string()).unwrap().unwrap();
     let final_y = final_read_txn.read(&"key_y".to_string()).unwrap().unwrap();
     assert_eq!(*final_x, final_batch_x, "Final key_x should be from Tx2");
-    assert_eq!(*final_y, initial_batch_y, "Final key_y should be initial (Tx1 aborted)");
+    assert_eq!(
+        *final_y, initial_batch_y,
+        "Final key_y should be initial (Tx1 aborted)"
+    );
 
     println!("Final SSI-Fwd data verified in storage.");
 }

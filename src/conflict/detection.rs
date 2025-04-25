@@ -41,8 +41,8 @@ pub fn detect_conflicts(
                 if let Some(current_value) = txn_buffer.get(key) {
                     // Conflict if another transaction committed a change after this one started.
                     if current_value.version() > committing_tx_id {
-                         println!("Conflict Detail: Committed WW (RC) on '{}' (Tx {} start {}, Buffer ver {})", key, committing_tx_id, committing_tx_id, current_value.version());
-                         conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
+                        println!("Conflict Detail: Committed WW (RC) on '{}' (Tx {} start {}, Buffer ver {})", key, committing_tx_id, committing_tx_id, current_value.version());
+                        conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 }
             }
@@ -58,11 +58,11 @@ pub fn detect_conflicts(
                         conflicts.insert(key.clone(), ConflictType::CommittedReadWrite);
                     }
                 } else {
-                     // Heuristic: Assume conflict if deleted after read (requires read_version > 0)
-                     if *read_version > 0 {
+                    // Heuristic: Assume conflict if deleted after read (requires read_version > 0)
+                    if *read_version > 0 {
                         println!("Conflict Detail: Committed RD on '{}' (Tx {} read ver {}, Buffer deleted)", key, committing_tx_id, read_version);
                         conflicts.insert(key.clone(), ConflictType::CommittedReadDelete);
-                     }
+                    }
                 }
             }
 
@@ -72,18 +72,20 @@ pub fn detect_conflicts(
                     // Check for WW conflict based on read version (if read) or start time (if not read)
                     let baseline_version = read_set.get(key).copied().unwrap_or(committing_tx_id);
                     if current_value.version() > baseline_version {
-                         println!("Conflict Detail: Committed WW (RR) on '{}' (Tx {} baseline ver {}, Buffer ver {})", key, committing_tx_id, baseline_version, current_value.version());
-                         conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
+                        println!("Conflict Detail: Committed WW (RR) on '{}' (Tx {} baseline ver {}, Buffer ver {})", key, committing_tx_id, baseline_version, current_value.version());
+                        conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 } else {
-                     // Item is in write_set but not in buffer (potential insert or write on deleted item)
-                     // CommittedWriteDelete check remains difficult without more history.
+                    // Item is in write_set but not in buffer (potential insert or write on deleted item)
+                    // CommittedWriteDelete check remains difficult without more history.
                 }
             }
         }
         TransactionIsolation::Serializable => {
             // This case should not be reached as Serializable validation is handled by DependencyTracker::validate_serializability
-            println!("Error: detect_conflicts called unexpectedly for Serializable isolation level.");
+            println!(
+                "Error: detect_conflicts called unexpectedly for Serializable isolation level."
+            );
             // Return empty conflicts for now, but this indicates a logic error in Transaction::commit
             // return Err(Error::Other("detect_conflicts called for Serializable".to_string()));
         }
