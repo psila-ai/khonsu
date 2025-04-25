@@ -13,6 +13,12 @@ pub struct MockStorage {
     data: Mutex<HashMap<String, RecordBatch>>,
 }
 
+impl Default for MockStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MockStorage {
     /// Creates a new `MockStorage` instance.
     pub fn new() -> Self {

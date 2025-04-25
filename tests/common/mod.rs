@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! Common utilities for Khonsu integration tests.
 
 use ahash::AHashMap as HashMap;

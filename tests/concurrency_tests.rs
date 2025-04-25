@@ -5,7 +5,7 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 
 // Use khonsu:: prefix for library items
-use khonsu::{Khonsu, KhonsuError, TransactionIsolation};
+use khonsu::{KhonsuError, TransactionIsolation};
 // Use common:: prefix for shared test utilities (since `mod common;` is declared above)
 use common::{create_record_batch, setup_khonsu};
 

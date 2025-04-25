@@ -42,8 +42,7 @@ pub fn merge_record_batches(
         })?;
 
     // Build a set of existing keys in the target for efficient lookup
-    let existing_target_keys: HashSet<&str> =
-        target_key_array.iter().filter_map(|key| key).collect();
+    let existing_target_keys: HashSet<&str> = target_key_array.iter().flatten().collect();
 
     for (key, change) in write_set {
         match change {

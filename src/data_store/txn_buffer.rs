@@ -12,6 +12,12 @@ pub struct TxnBuffer {
     data: RwLock<HashMap<DataKey, VersionedValue>>,
 }
 
+impl Default for TxnBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TxnBuffer {
     /// Creates a new, empty `TxnBuffer`.
     pub fn new() -> Self {

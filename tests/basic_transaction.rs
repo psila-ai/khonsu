@@ -8,18 +8,15 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
 // Use khonsu:: prefix for library items
-use khonsu::{
-    conflict::resolution::ConflictResolution, errors::KhonsuError, Khonsu, TransactionIsolation,
-};
+use khonsu::{errors::KhonsuError, TransactionIsolation};
 // Use common:: prefix for shared test utilities
-use common::MockStorage;
 
 // Configure tests to run single-threaded
 #[cfg(test)]
 mod single_threaded_tests {
     // Import common items needed within the test module
     use super::*; // Brings in Arc, arrow types, khonsu types, etc.
-    use crate::common::{create_record_batch, setup_khonsu}; // Use crate::common here
+    use crate::common::setup_khonsu; // Use crate::common here
 
     // Helper to create schema, specific to this file's tests if needed, or use common one
     fn create_basic_schema() -> Arc<Schema> {

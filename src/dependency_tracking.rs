@@ -58,6 +58,12 @@ pub struct DependencyTracker {
     max_txn_age: Duration,
 }
 
+impl Default for DependencyTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyTracker {
     /// Creates a new `DependencyTracker`.
     pub fn new() -> Self {
@@ -146,12 +152,10 @@ impl DependencyTracker {
             .transactions
             .read()
             .get(&reader_id)
-            .map_or(false, |info| info.state == TxnState::Active)
+            .is_some_and(|info| info.state == TxnState::Active)
         {
             let mut item_deps = self.item_dependencies.write();
-            let item_dep = item_deps
-                .entry(data_item.key.clone())
-                .or_insert_with(ItemDependency::default);
+            let item_dep = item_deps.entry(data_item.key.clone()).or_default();
             item_dep.readers.insert(reader_id, read_version);
             debug!(
                 "Recorded active read: Tx {} read {:?} at version {}",
@@ -166,12 +170,10 @@ impl DependencyTracker {
             .transactions
             .read()
             .get(&writer_id)
-            .map_or(false, |info| info.state == TxnState::Active)
+            .is_some_and(|info| info.state == TxnState::Active)
         {
             let mut item_deps = self.item_dependencies.write();
-            let item_dep = item_deps
-                .entry(data_item.key.clone())
-                .or_insert_with(ItemDependency::default);
+            let item_dep = item_deps.entry(data_item.key.clone()).or_default();
             item_dep.writers.insert(writer_id); // Just track the active writer ID
             debug!(
                 "Recorded active write intention: Tx {} intends to write to {:?}",
@@ -257,17 +259,16 @@ impl DependencyTracker {
         for write_key in write_set {
             if let Some(dep) = item_deps_read_lock.get(write_key) {
                 for reader_id in dep.readers.keys() {
-                    if *reader_id != committing_tx_id {
-                        if transactions_read_lock
+                    if *reader_id != committing_tx_id
+                        && transactions_read_lock
                             .get(reader_id)
-                            .map_or(false, |info| info.state == TxnState::Active)
-                        {
-                            debug!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
-                            has_outgoing_rw_edge = true;
-                            if has_incoming_rw_edge {
-                                break;
-                            } // Optimization
-                        }
+                            .is_some_and(|info| info.state == TxnState::Active)
+                    {
+                        debug!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
+                        has_outgoing_rw_edge = true;
+                        if has_incoming_rw_edge {
+                            break;
+                        } // Optimization
                     }
                 }
                 if has_outgoing_rw_edge && has_incoming_rw_edge {
@@ -284,17 +285,16 @@ impl DependencyTracker {
                 // Check active writers
                 if let Some(dep) = item_deps_read_lock.get(read_key) {
                     for writer_id in &dep.writers {
-                        if *writer_id != committing_tx_id {
-                            if transactions_read_lock
+                        if *writer_id != committing_tx_id
+                            && transactions_read_lock
                                 .get(writer_id)
-                                .map_or(false, |info| info.state == TxnState::Active)
-                            {
-                                debug!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
-                                has_incoming_rw_edge = true;
-                                if has_outgoing_rw_edge {
-                                    break;
-                                } // Optimization
-                            }
+                                .is_some_and(|info| info.state == TxnState::Active)
+                        {
+                            debug!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
+                            has_incoming_rw_edge = true;
+                            if has_outgoing_rw_edge {
+                                break;
+                            } // Optimization
                         }
                     }
                 }
