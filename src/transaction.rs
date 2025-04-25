@@ -1,4 +1,4 @@
-use ahash::AHashMap as HashMap;
+use ahash::{AHashMap as HashMap, AHashSet as HashSet};
 use arrow::record_batch::RecordBatch;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -115,14 +115,25 @@ impl Transaction {
         // Stage the write/update in the write set.
         // For Serializable, dependency tracking for writes will be recorded during commit
         // when the commit timestamp (write version) is available.
-        self.write_set.insert(key, Some(record_batch));
+        self.write_set.insert(key.clone(), Some(record_batch)); // Clone key for data_item
+        // Record write intention immediately for Serializable isolation
+        if self.isolation_level == TransactionIsolation::Serializable {
+            let data_item = DataItem { key }; // Use the owned key
+            self.dependency_tracker.record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
+        }
         Ok(())
     }
 
     /// Stages a delete operation for a key.
     pub fn delete(&mut self, key: &str) -> Result<()> {
         // Stage the deletion in the write set.
-        self.write_set.insert(key.to_string(), None);
+        let key_string = key.to_string();
+        self.write_set.insert(key_string.clone(), None); // Clone key for data_item
+        // Record write intention (deletion is a type of write) immediately for Serializable isolation
+        if self.isolation_level == TransactionIsolation::Serializable {
+            let data_item = DataItem { key: key_string }; // Use the owned key
+            self.dependency_tracker.record_write(self.id, data_item, self.id); // Use txn ID as placeholder version
+        }
         Ok(())
     }
 
@@ -134,19 +145,21 @@ impl Transaction {
         // in optimistic concurrency control, but for basic structure, we'll get it here.
         let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
 
-        // For Serializable isolation, record write dependencies before conflict detection.
-        if self.isolation_level == TransactionIsolation::Serializable {
-            // Record write dependencies with the commit timestamp as the write version.
-            for key in self.write_set.keys() {
-                let data_item = DataItem { key: key.clone() };
-                self.dependency_tracker
-                    .record_write(self.id, data_item, commit_timestamp);
-            }
-        }
+        // // For Serializable isolation, record write dependencies before conflict detection. // MOVED TO WRITE/DELETE
+        // if self.isolation_level == TransactionIsolation::Serializable {
+        //     // Record write dependencies with the commit timestamp as the write version.
+        //     for key in self.write_set.keys() {
+        //         let data_item = DataItem { key: key.clone() };
+        //         self.dependency_tracker
+        //             .record_write(self.id, data_item, commit_timestamp); // Placeholder version was sufficient
+        //     }
+        // }
 
-        // For Serializable isolation, perform cycle detection *before* conflict detection.
+        // For Serializable isolation, perform validation (previously cycle detection) *before* standard conflict detection.
         if self.isolation_level == TransactionIsolation::Serializable {
-            if !self.dependency_tracker.check_for_cycles(self.id)? {
+            // Extract keys from write_set for cycle detection
+            let write_set_keys: HashSet<String> = self.write_set.keys().cloned().collect();
+            if !self.dependency_tracker.check_for_cycles(self.id, &self.read_set, &write_set_keys)? {
                 // Cycle detected, serializability violation.
                 // Remove dependencies for this transaction as it's aborting.
                 self.dependency_tracker.remove_transaction_dependencies(self.id);
@@ -170,6 +183,10 @@ impl Transaction {
             match self.conflict_resolution {
                 ConflictResolution::Fail => {
                     // Fail the transaction on conflict
+                    // Remove dependencies for this transaction as it's aborting due to conflict.
+                    if self.isolation_level == TransactionIsolation::Serializable {
+                        self.dependency_tracker.remove_transaction_dependencies(self.id);
+                    }
                     return Err(Error::TransactionConflict);
                 }
                 ConflictResolution::Ignore => {
@@ -280,7 +297,12 @@ impl Transaction {
         // This should happen after the in-memory state is updated.
         self.storage.apply_mutations(mutations_to_persist)?;
 
-        Ok(()) // Placeholder for successful commit
+        // Remove dependencies for this transaction after successful commit.
+        if self.isolation_level == TransactionIsolation::Serializable {
+            self.dependency_tracker.remove_transaction_dependencies(self.id);
+        }
+
+        Ok(()) // Successful commit
     }
 
     /// Aborts the transaction, discarding staged changes.

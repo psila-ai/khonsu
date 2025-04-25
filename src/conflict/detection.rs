@@ -1,4 +1,4 @@
-use ahash::AHashMap as HashMap;
+use ahash::AHashMap as HashMap; // Removed unused HashSet import
 use arrow::record_batch::RecordBatch;
 use std::sync::Arc; // Added Arc import
 
@@ -31,7 +31,7 @@ pub fn detect_conflicts(
     read_set: &HashMap<String, u64>,
     write_set: &HashMap<String, Option<RecordBatch>>,
     txn_buffer: &TxnBuffer,
-    dependency_tracker: &Arc<DependencyTracker>, // Added dependency_tracker parameter
+    dependency_tracker: &Arc<DependencyTracker>, // Removed underscore, parameter will be used
 ) -> Result<HashMap<String, ConflictType>> {
     let mut conflicts: HashMap<String, ConflictType> = HashMap::new();
 
@@ -111,42 +111,7 @@ pub fn detect_conflicts(
                 }
             }
 
-            if isolation_level == TransactionIsolation::Serializable {
-                // Serializable: Additional checks for serializability anomalies.
-                // This includes checking for Write-Read conflicts:
-                // If another transaction read data that this transaction is writing,
-                // and that other transaction committed after this one started.
-                // This requires tracking read sets of other active/recently committed transactions,
-                // which is complex and not directly supported by the current TxnBuffer structure.
-                // Serializable: Perform serializability validation by checking for cycles in the dependency graph.
-                match dependency_tracker.check_for_cycles(_transaction_id) {
-                    Ok(true) => {
-                        // No cycle detected, serializability is maintained so far for this transaction.
-                        println!("Serializable validation successful in detect_conflicts for transaction {}", _transaction_id);
-                    }
-                    Ok(false) => {
-                        // Cycle detected, serializability violation.
-                        println!("Serializable validation failed in detect_conflicts for transaction {}: Cycle detected.", _transaction_id);
-                        // Add a conflict entry to indicate the serializability violation.
-                        // We can use a generic key or a specific one if available, but for now,
-                        // we'll just indicate a conflict occurred due to serializability.
-                        // The actual keys involved in the cycle are not easily available here.
-                        // A simple approach is to add a dummy conflict entry or rely on the
-                        // error return from this function to signal the conflict.
-                        // Since detect_conflicts returns a map of conflicts, we should add an entry.
-                        // Using a placeholder key like "__SERIALIZABILITY_CONFLICT__"
-                        conflicts.insert(
-                            "__SERIALIZABILITY_CONFLICT__".to_string(),
-                            ConflictType::WriteWrite,
-                        ); // Using WriteWrite as a generic conflict type for now
-                    }
-                    Err(e) => {
-                        // An error occurred during cycle detection.
-                        println!("Error during serializable validation in detect_conflicts for transaction {}: {:?}", _transaction_id, e);
-                        return Err(e); // Propagate the error
-                    }
-                }
-            }
+            // Serializable validation using dependency_tracker is now solely handled in Transaction::commit's call to check_for_cycles.
         }
     }
 
