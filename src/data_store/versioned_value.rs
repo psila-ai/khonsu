@@ -2,7 +2,7 @@ use std::sync::Arc;
 use arrow::record_batch::RecordBatch;
 
 /// Represents a data value with an associated version/timestamp.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct VersionedValue {
     /// The actual data, likely an Arrow RecordBatch.
     data: Arc<RecordBatch>,

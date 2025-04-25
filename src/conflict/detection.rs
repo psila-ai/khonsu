@@ -22,7 +22,7 @@ pub enum ConflictType {
 /// This function implements optimistic concurrency control validation and returns
 /// a map of conflicting keys and the type of conflict.
 pub fn detect_conflicts(
-    _transaction_id: u64, // Transaction ID might be useful for logging/debugging
+    transaction_id: u64, // Transaction ID might be useful for logging/debugging
     isolation_level: TransactionIsolation,
     read_set: &HashMap<String, u64>,
     write_set: &HashMap<String, Option<RecordBatch>>,
@@ -69,7 +69,7 @@ pub fn detect_conflicts(
                     // Get the version of the key as seen by this transaction.
                     // If the key was read, use the version from the read set.
                     // If the key was not read, use the transaction's ID as a proxy for its start version.
-                    let transaction_version_of_key = read_set.get(key).copied().unwrap_or(_transaction_id);
+                    let transaction_version_of_key = read_set.get(key).copied().unwrap_or(transaction_id);
 
                     if current_value.version() > transaction_version_of_key {
                          // Data being written by this transaction was modified by another transaction
