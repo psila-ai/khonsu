@@ -8,7 +8,7 @@ use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::data_store::versioned_value::VersionedValue;
 use crate::dependency_tracking::{DataItem, DependencyTracker}; // Keep DependencyTracker
-use crate::errors::{Error, Result};
+use crate::errors::{KhonsuError, Result};
 use crate::storage::{Storage, StorageMutation};
 use crate::TransactionIsolation;
 
@@ -154,7 +154,7 @@ impl Transaction {
                 )? {
                     // SSI validation failed (backward or forward check).
                     self.dependency_tracker.mark_aborted(self.id); // Mark as aborted in tracker
-                    return Err(Error::TransactionConflict);
+                    return Err(KhonsuError::TransactionConflict);
                 }
                 // If SSI validation passes, assume no conflicts for this level.
                 HashMap::new() // Return empty conflicts
@@ -179,7 +179,7 @@ impl Transaction {
                 ConflictResolution::Fail => {
                     // Mark as aborted (tracker handles non-serializable cases gracefully)
                     self.dependency_tracker.mark_aborted(self.id);
-                    return Err(Error::TransactionConflict);
+                    return Err(KhonsuError::TransactionConflict);
                 }
                 ConflictResolution::Ignore => {
                     write_set_to_apply.retain(|key, _| !conflicts.contains_key(key));

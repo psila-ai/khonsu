@@ -13,7 +13,7 @@ pub use conflict::resolution::ConflictResolution;
 pub use data_store::txn_buffer::TxnBuffer;
 pub use data_store::versioned_value::VersionedValue;
 pub use dependency_tracking::DataItem;
-pub use errors::{Error, Result};
+pub use errors::{KhonsuError, Result};
 pub use khonsu::Khonsu;
 pub use storage::Storage;
 pub use transaction::Transaction;
@@ -36,16 +36,13 @@ pub enum TransactionIsolation {
     /// then all consecutive reads will provide the same in-transaction value. With this isolation
     /// level accessed values are stored within in-transaction memory, so consecutive access to
     /// the same key within the same transaction will always return the value that was previously
-    /// read or updated within this transaction. If concurrency is
-    /// [TransactionConcurrency::Pessimistic], then a lock on the key will be acquired
-    /// prior to accessing the value.
+    /// read or updated within this transaction.
     RepeatableRead,
     ///
     /// [TransactionIsolation::Serializable] isolation level means that all transactions occur in a completely isolated fashion,
     /// as if all transactions in the system had executed serially, one after the other. Read access
     /// with this level happens the same way as with [TransactionIsolation::RepeatableRead] level.
-    /// However, in  [TransactionConcurrency::Optimistic] mode, if some transactions cannot be
-    /// serially isolated from each other, then one winner will be picked and the other
-    /// transactions in conflict will result with abort.
+    /// However, if some transactions cannot be serially isolated from each other,
+    /// then one winner will be picked and the other transactions in conflict will result with abort.
     Serializable,
 }

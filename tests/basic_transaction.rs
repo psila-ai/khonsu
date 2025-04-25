@@ -5,7 +5,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
 use khonsu::{
-    conflict::resolution::ConflictResolution, errors::Error, Khonsu, TransactionIsolation,
+    conflict::resolution::ConflictResolution, errors::KhonsuError, Khonsu, TransactionIsolation,
 };
 
 mod mock_storage;
@@ -230,7 +230,7 @@ mod single_threaded_tests {
         // Verify Tx2 commit succeeded
         // Verify Tx2 commit failed (due to backward validation conflict with committed Tx1)
         assert!(commit_result_tx2.is_err());
-        if let Err(Error::TransactionConflict) = commit_result_tx2 {
+        if let Err(KhonsuError::TransactionConflict) = commit_result_tx2 {
              println!("Tx2 correctly failed with TransactionConflict (SSI Backward Validation)");
         } else {
              panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
@@ -401,7 +401,7 @@ mod single_threaded_tests {
 
         // Verify Tx2 commit failed with TransactionConflict (SSI Backward or standard OCC should catch this)
         assert!(commit_result_tx2.is_err());
-        if let Err(Error::TransactionConflict) = commit_result_tx2 {
+        if let Err(KhonsuError::TransactionConflict) = commit_result_tx2 {
             println!("Tx2 correctly failed with TransactionConflict (WW conflict with committed Tx1)");
         } else {
             panic!("Tx2 failed with unexpected result: {:?}", commit_result_tx2);
