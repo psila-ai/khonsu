@@ -85,28 +85,46 @@ impl DependencyTracker {
 
     /// Marks a transaction as Committed. Stores write set keys for recent commits.
     pub fn mark_committed(&self, txn_id: u64, commit_ts: u64, write_set_keys: HashSet<String>) {
-        if let Some(info) = self.transactions.write().get_mut(&txn_id) {
-            info.state = TxnState::Committed;
-            info.commit_ts = Some(commit_ts);
-            info.write_set_keys = Some(write_set_keys); // Store write set for recent commits
-            println!("Marked Tx {} as Committed (CommitTS: {})", txn_id, commit_ts);
-        } else {
-            println!("Warning: Tx {} not found in tracker to mark as Committed.", txn_id);
+        let found = { // Scope the write lock
+            let mut transactions_guard = self.transactions.write();
+            if let Some(info) = transactions_guard.get_mut(&txn_id) {
+                info.state = TxnState::Committed;
+                info.commit_ts = Some(commit_ts);
+                info.write_set_keys = Some(write_set_keys); // Store write set for recent commits
+                println!("Marked Tx {} as Committed (CommitTS: {})", txn_id, commit_ts);
+                true
+            } else {
+                println!("Warning: Tx {} not found in tracker to mark as Committed.", txn_id);
+                false
+            }
+            // transactions_guard lock is released here
+        };
+
+        if found {
+            self.remove_active_dependencies(txn_id); // Acquire item_dependencies lock *after* releasing transactions lock
         }
-        self.remove_active_dependencies(txn_id);
         self.maybe_trigger_cleanup();
     }
 
     /// Marks a transaction as Aborted.
     pub fn mark_aborted(&self, txn_id: u64) {
-        if let Some(info) = self.transactions.write().get_mut(&txn_id) {
-            info.state = TxnState::Aborted;
-            info.write_set_keys = None;
-            println!("Marked Tx {} as Aborted", txn_id);
-        } else {
-             println!("Warning: Tx {} not found in tracker to mark as Aborted.", txn_id);
+         let found = { // Scope the write lock
+            let mut transactions_guard = self.transactions.write();
+            if let Some(info) = transactions_guard.get_mut(&txn_id) {
+                info.state = TxnState::Aborted;
+                info.write_set_keys = None; // Clear write set on abort
+                println!("Marked Tx {} as Aborted", txn_id);
+                true
+            } else {
+                 println!("Warning: Tx {} not found in tracker to mark as Aborted.", txn_id);
+                 false
+            }
+            // transactions_guard lock is released here
+        };
+
+        if found {
+            self.remove_active_dependencies(txn_id); // Acquire item_dependencies lock *after* releasing transactions lock
         }
-        self.remove_active_dependencies(txn_id);
         self.maybe_trigger_cleanup();
     }
 
