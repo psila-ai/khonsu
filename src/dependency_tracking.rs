@@ -1,4 +1,5 @@
 use ahash::{AHashMap as HashMap, AHashSet as HashSet};
+use log::debug;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering}; // Needed for cleanup counter
 use std::time::{Duration, Instant}; // Needed for cleanup timing
@@ -79,7 +80,7 @@ impl DependencyTracker {
             creation_time: Instant::now(),
         };
         self.transactions.write().insert(txn_id, info);
-        println!("Registered Tx {} as Active", txn_id);
+        debug!("Registered Tx {} as Active", txn_id);
         self.maybe_trigger_cleanup(); // Periodically cleanup
     }
 
@@ -92,13 +93,13 @@ impl DependencyTracker {
                 info.state = TxnState::Committed;
                 info.commit_ts = Some(commit_ts);
                 info.write_set_keys = Some(write_set_keys); // Store write set for recent commits
-                println!(
+                debug!(
                     "Marked Tx {} as Committed (CommitTS: {})",
                     txn_id, commit_ts
                 );
                 true
             } else {
-                println!(
+                debug!(
                     "Warning: Tx {} not found in tracker to mark as Committed.",
                     txn_id
                 );
@@ -121,10 +122,10 @@ impl DependencyTracker {
             if let Some(info) = transactions_guard.get_mut(&txn_id) {
                 info.state = TxnState::Aborted;
                 info.write_set_keys = None; // Clear write set on abort
-                println!("Marked Tx {} as Aborted", txn_id);
+                debug!("Marked Tx {} as Aborted", txn_id);
                 true
             } else {
-                println!(
+                debug!(
                     "Warning: Tx {} not found in tracker to mark as Aborted.",
                     txn_id
                 );
@@ -152,7 +153,7 @@ impl DependencyTracker {
                 .entry(data_item.key.clone())
                 .or_insert_with(ItemDependency::default);
             item_dep.readers.insert(reader_id, read_version);
-            println!(
+            debug!(
                 "Recorded active read: Tx {} read {:?} at version {}",
                 reader_id, data_item, read_version
             );
@@ -172,7 +173,7 @@ impl DependencyTracker {
                 .entry(data_item.key.clone())
                 .or_insert_with(ItemDependency::default);
             item_dep.writers.insert(writer_id); // Just track the active writer ID
-            println!(
+            debug!(
                 "Recorded active write intention: Tx {} intends to write to {:?}",
                 writer_id, data_item
             );
@@ -188,13 +189,13 @@ impl DependencyTracker {
         write_set: &HashSet<String>, // Write set of the committing transaction
         txn_buffer: &TxnBuffer, // Need buffer for backward validation
     ) -> Result<bool> {
-        println!("Starting SSI validation for Tx {}", committing_tx_id);
+        debug!("Starting SSI validation for Tx {}", committing_tx_id);
         let transactions_read_lock = self.transactions.read();
 
         let start_ts = match transactions_read_lock.get(&committing_tx_id) {
             Some(info) if info.state == TxnState::Active => info.start_ts,
             _ => {
-                println!(
+                debug!(
                     "Error: Committing Tx {} not found or not active.",
                     committing_tx_id
                 );
@@ -210,7 +211,7 @@ impl DependencyTracker {
                 if current_value.version() > *read_version {
                     let writer_commit_ts = current_value.version();
                     if writer_commit_ts > start_ts {
-                        println!("SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
+                        debug!("SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
                                    committing_tx_id, key, read_version, writer_commit_ts, writer_commit_ts, writer_commit_ts);
                         return Ok(false);
                     }
@@ -219,7 +220,7 @@ impl DependencyTracker {
                 // Item we read was deleted. Conflict if deletion committed after we started.
                 if *read_version > 0 {
                     // Heuristic: If we read version > 0, it existed
-                    println!("SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
+                    debug!("SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
                               committing_tx_id, key, read_version);
                     return Ok(false);
                 }
@@ -231,13 +232,13 @@ impl DependencyTracker {
         for key in write_set {
             if let Some(current_value) = txn_buffer.get(key) {
                 let writer_commit_ts = current_value.version();
-                println!(
+                debug!(
                     "  SSI WW Check: Key='{}', CommittingTx={}, StartTs={}, BufferVersion={}",
                     key, committing_tx_id, start_ts, writer_commit_ts
                 ); // ADDED LOG
                    // Conflict if writer committed after we started.
                 if writer_commit_ts > start_ts {
-                    println!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
+                    debug!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
                                committing_tx_id, key, writer_commit_ts, writer_commit_ts, writer_commit_ts);
                     return Ok(false);
                 }
@@ -261,7 +262,7 @@ impl DependencyTracker {
                             .get(reader_id)
                             .map_or(false, |info| info.state == TxnState::Active)
                         {
-                            println!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
+                            debug!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
                             has_outgoing_rw_edge = true;
                             if has_incoming_rw_edge {
                                 break;
@@ -288,7 +289,7 @@ impl DependencyTracker {
                                 .get(writer_id)
                                 .map_or(false, |info| info.state == TxnState::Active)
                             {
-                                println!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
+                                debug!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
                                 has_incoming_rw_edge = true;
                                 if has_outgoing_rw_edge {
                                     break;
@@ -309,7 +310,7 @@ impl DependencyTracker {
                     {
                         if let Some(ref committed_write_set) = other_info.write_set_keys {
                             if committed_write_set.contains(read_key) {
-                                println!("SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'", other_txn_id, committing_tx_id, read_key);
+                                debug!("SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'", other_txn_id, committing_tx_id, read_key);
                                 has_incoming_rw_edge = true;
                                 if has_outgoing_rw_edge {
                                     break;
@@ -328,14 +329,14 @@ impl DependencyTracker {
 
         // Check for dangerous structure (SIREAD + PREAD conflict)
         if has_incoming_rw_edge && has_outgoing_rw_edge {
-            println!(
+            debug!(
                 "SSI Forward Validation Failed: Dangerous RW structure detected for Tx {}",
                 committing_tx_id
             );
             return Ok(false);
         }
 
-        println!("SSI validation successful for Tx {}", committing_tx_id);
+        debug!("SSI validation successful for Tx {}", committing_tx_id);
         Ok(true)
     }
 
@@ -359,7 +360,7 @@ impl DependencyTracker {
                 }
             }
         }
-        println!("Removed active dependencies for transaction {}", tx_id);
+        debug!("Removed active dependencies for transaction {}", tx_id);
     }
 
     /// Periodically checks and removes old transaction info.
@@ -387,7 +388,7 @@ impl DependencyTracker {
         });
         let removed_count = initial_count - transactions.len();
         if removed_count > 0 {
-            println!("Cleaned up info for {} old transactions.", removed_count);
+            debug!("Cleaned up info for {} old transactions.", removed_count);
         }
     }
 }

@@ -450,6 +450,7 @@ dependencies = [
  "ahash",
  "arrow",
  "futures",
+ "log",
  "parking_lot",
  "thiserror",
 ]

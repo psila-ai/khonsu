@@ -1,5 +1,6 @@
 use ahash::{AHashMap as HashMap, AHashSet as HashSet}; // Keep HashSet import
 use arrow::record_batch::RecordBatch;
+use log::debug;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -187,13 +188,13 @@ impl Transaction {
                 }
                 ConflictResolution::Ignore => {
                     write_set_to_apply.retain(|key, _| !conflicts.contains_key(key));
-                    println!("Conflict detected for transaction {}. Resolution: Ignore. Filtered {} conflicting changes.", self.id, conflicts.len());
+                    debug!("Conflict detected for transaction {}. Resolution: Ignore. Filtered {} conflicting changes.", self.id, conflicts.len());
                 }
                 ConflictResolution::Replace => {
-                    println!("Conflict detected for transaction {}. Resolution: Replace. Conflicting changes will overwrite existing data.", self.id);
+                    debug!("Conflict detected for transaction {}. Resolution: Replace. Conflicting changes will overwrite existing data.", self.id);
                 }
                 ConflictResolution::Append => {
-                    println!("Conflict detected for transaction {}. Resolution: Append. Merging conflicting changes.", self.id);
+                    debug!("Conflict detected for transaction {}. Resolution: Append. Merging conflicting changes.", self.id);
                     let mut merged_changes: HashMap<String, Option<RecordBatch>> = HashMap::new();
                     for (key, _conflict_type) in &conflicts {
                         if let Some(change) = write_set_to_apply.get(key) {
@@ -211,11 +212,11 @@ impl Transaction {
                                     merged_changes.insert(key.clone(), Some(new_data.clone()));
                                 }
                             } else {
-                                println!("Conflict on deletion for key {}. Append resolution not applicable.", key);
+                                debug!("Conflict on deletion for key {}. Append resolution not applicable.", key);
                                 merged_changes.insert(key.clone(), None);
                             }
                         } else {
-                            println!("Conflict on read-only key {}. No Append resolution action needed on write set.", key);
+                            debug!("Conflict on read-only key {}. No Append resolution action needed on write set.", key);
                         }
                     }
                     for (key, merged_change) in merged_changes {
@@ -255,7 +256,7 @@ impl Transaction {
 
     /// Aborts the transaction, discarding staged changes.
     pub fn rollback(self) {
-        println!("Transaction {} rolled back", self.id);
+        debug!("Transaction {} rolled back", self.id);
         // Mark as aborted in tracker
         self.dependency_tracker.mark_aborted(self.id);
         // The `write_set` and `read_set` are dropped when `self` is dropped.
