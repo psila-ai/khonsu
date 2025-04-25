@@ -2,31 +2,27 @@
 
 ## Current Work Focus
 
-The current focus is on finalizing the detailed plan for the Khonsu STM library, incorporating specific lock-free data structures and external integration traits, and clarifying the role of the in-memory Transaction Buffer (TxnBuffer) versus persistent Storage.
+The current focus is on implementing full Serializable isolation, which requires introducing transaction dependency tracking and a validation algorithm. This is a significant expansion of the initial core STM implementation.
 
 ## Recent Changes
 
-- Created the `memory-bank` directory and populated initial core documentation files.
-- Developed a detailed plan for the STM architecture, including core components, data management, concurrency control, transaction lifecycle, and external traits.
-- Incorporated specific lock-free data structures (`crossbeam-skiplist::SkipMap`, `crossbeam-queue::SegQueue`) and the `TwoPhaseCommitParticipant` trait into the plan.
-- Defined the code organization strategy using multiple small files and specified the test location (`tests/`).
-- Updated `systemPatterns.md` and `techContext.md` to reflect the refined plan.
-- Renamed the in-memory Shared Data Store to Transaction Buffer (TxnBuffer) for clarity.
+- Completed the initial core STM implementation steps as previously outlined.
+- Addressed user feedback regarding `TxnBuffer::insert` and the `read` method `TODO`.
+- Implemented basic conflict detection logic for ReadCommitted, RepeatableRead, and Serializable (excluding full serializability checks).
+- Updated `src/arrow_utils.rs` to support additional data types and removed unused functions.
+- Added basic test cases for core transaction operations.
 
 ## Next Steps
 
-1. Implement the core data structures: `VersionedValue` and the `SkipMap`-based Transaction Buffer (TxnBuffer).
-2. Implement the `Transaction` struct and its methods (`read`, `write`, `delete`).
-3. Implement the `Khonsu` struct and the transaction start API.
-4. Implement the commit process, including validation against the TxnBuffer, conflict detection, resolution, and atomically applying changes to the TxnBuffer.
-5. Implement the rollback functionality.
-6. Implement the logic for different `TransactionIsolation` levels.
-7. Implement the `Storage` trait and integrate it into the commit process for persistence.
-8. Implement the `TwoPhaseCommitParticipant` trait for distributed commit integration.
-9. Implement helper functions for manual Arrow array manipulation in `arrow_utils.rs`.
-10. Define and implement error types in `errors.rs`.
-11. Write comprehensive tests in the `tests/` directory, ensuring single-threaded execution.
-12. Refine memory reclamation using `crossbeam-epoch`.
+1.  **Implement Transaction Dependency Tracking:** Design and implement data structures and logic to track read and write dependencies between transactions.
+2.  **Integrate Dependency Tracking:** Modify the transaction lifecycle (start, read, write, commit) to record dependencies.
+3.  **Implement Serializable Validation Algorithm:** Develop an algorithm (e.g., based on cycle detection in a dependency graph) to check for serializability violations during commit.
+4.  **Integrate Serializable Validation:** Modify the `detect_conflicts` function to use the dependency tracking and validation algorithm for Serializable transactions.
+5.  **Refine Conflict Detection:** Review and refine existing conflict detection logic based on the new dependency tracking mechanisms.
+6.  **Write Comprehensive Tests:** Add comprehensive test cases specifically for Serializable isolation and conflict scenarios.
+7.  **Implement TwoPhaseCommitParticipant:** Complete the implementation of the `TwoPhaseCommitParticipant` trait for distributed commit integration (revisiting this after core serializability).
+8.  **Refine Memory Reclamation:** Review memory reclamation in light of new data structures for dependency tracking.
+9.  **Distributed Commit Functionality:** Implement the full distributed commit protocol (future phase).
 
 ## Active Decisions and Considerations
 

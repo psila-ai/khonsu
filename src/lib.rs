@@ -6,6 +6,7 @@ pub mod storage;
 pub mod twopc;
 pub mod conflict;
 pub mod arrow_utils;
+pub mod dependency_tracking; // Declare the new module
 
 // Re-export key types and structs for easier access
 pub use errors::{Error, Result};
@@ -16,6 +17,7 @@ pub use transaction::Transaction;
 pub use storage::Storage;
 pub use twopc::{TwoPhaseCommitParticipant, TransactionChanges, ParticipantError};
 pub use conflict::resolution::ConflictResolution;
+pub use dependency_tracking::DataItem; // Re-export DataItem
 
 
 // Define the TransactionIsolation enum here as it's a core part of the public API
@@ -48,6 +50,3 @@ pub enum TransactionIsolation {
     /// transactions in conflict will result with abort.
     Serializable,
 }
-
-// TODO: Implement conflict detection logic.
-// TODO: Write tests in the tests/ directory.

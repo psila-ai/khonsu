@@ -10,6 +10,7 @@ use crate::TransactionIsolation;
 use crate::conflict::resolution::ConflictResolution;
 use crate::conflict::detection::{detect_conflicts, ConflictType}; // Import the conflict detection function and ConflictType
 use crate::storage::{Storage, StorageMutation}; // Import the Storage trait and StorageMutation
+use crate::dependency_tracking::{DependencyTracker, DataItem}; // Import DependencyTracker and DataItem
 
 /// Represents a single transaction.
 pub struct Transaction {
@@ -30,6 +31,8 @@ pub struct Transaction {
     write_set: HashMap<String, Option<RecordBatch>>,
     /// The conflict resolution strategy for this transaction.
     conflict_resolution: ConflictResolution,
+    /// Reference to the dependency tracker for serializability.
+    dependency_tracker: Arc<DependencyTracker>,
 }
 
 impl Transaction {
@@ -47,6 +50,7 @@ impl Transaction {
         transaction_counter: Arc<AtomicU64>,
         storage: Arc<dyn Storage>,
         conflict_resolution: ConflictResolution,
+        dependency_tracker: Arc<DependencyTracker>, // Add dependency_tracker parameter
     ) -> Self {
         Self {
             id,
@@ -57,13 +61,13 @@ impl Transaction {
             read_set: HashMap::new(),
             write_set: HashMap::new(),
             conflict_resolution,
+            dependency_tracker, // Initialize dependency_tracker field
         }
     }
 
     /// Reads data associated with a key.
     pub fn read(&mut self, key: &String) -> Result<Option<Arc<RecordBatch>>> {
-        // TODO: Implement read logic based on isolation level and read/write sets.
-        // For now, a simple read from the transaction buffer, considering the write set.
+        // Reads data based on isolation level and read/write sets.
 
         // Check the write set first for any staged changes (including deletions)
         if let Some(change) = self.write_set.get(key) {
@@ -92,6 +96,11 @@ impl Transaction {
                  if let Some(value) = versioned_value {
                     // Record the read and its version
                     self.read_set.insert(key.to_string(), value.version());
+                    // For Serializable, record a read operation for dependency tracking.
+                    if self.isolation_level == TransactionIsolation::Serializable {
+                        let data_item = DataItem { key: key.clone() }; // Create DataItem
+                        self.dependency_tracker.record_read(self.id, data_item, value.version());
+                    }
                     Ok(Some(value.data().clone()))
                 } else {
                     Ok(None)
@@ -102,6 +111,15 @@ impl Transaction {
 
     /// Stages a write operation for a key with the provided RecordBatch.
     pub fn write(&mut self, key: String, record_batch: RecordBatch) -> Result<()> {
+        // For Serializable, record a write operation for dependency tracking.
+        if self.isolation_level == TransactionIsolation::Serializable {
+            let data_item = DataItem { key: key.clone() }; // Create DataItem
+            // Need the version of the data being written. This is the commit timestamp,
+            // which is not available yet. We'll record the write and associate it
+            // with the commit timestamp later during the commit process.
+            // For now, just record that this transaction intends to write to this key.
+            self.dependency_tracker.record_write(self.id, data_item);
+        }
         // Stage the write/update in the write set.
         self.write_set.insert(key, Some(record_batch));
         Ok(())

@@ -7,6 +7,7 @@ use crate::transaction::Transaction;
 use crate::{ParticipantError, TransactionChanges, TransactionIsolation, TwoPhaseCommitParticipant};
 use crate::conflict::resolution::ConflictResolution;
 use crate::storage::Storage; // Import the Storage trait
+use crate::dependency_tracking::DependencyTracker; // Import DependencyTracker
 
 /// The main entry point for the Khonsu Software Transactional Memory system.
 pub struct Khonsu {
@@ -20,6 +21,8 @@ pub struct Khonsu {
     default_isolation_level: TransactionIsolation,
     /// The default conflict resolution strategy for new transactions.
     default_conflict_resolution: ConflictResolution,
+    /// Tracks dependencies between transactions for serializability.
+    dependency_tracker: Arc<DependencyTracker>,
 }
 
 impl Khonsu {
@@ -35,6 +38,7 @@ impl Khonsu {
             storage,
             default_isolation_level,
             default_conflict_resolution,
+            dependency_tracker: Arc::new(DependencyTracker::new()), // Initialize DependencyTracker
         }
     }
 
@@ -51,6 +55,7 @@ impl Khonsu {
             Arc::clone(&self.transaction_counter), // Pass a clone of the transaction counter Arc
             Arc::clone(&self.storage), // Pass a clone of the storage Arc
             self.default_conflict_resolution,
+            Arc::clone(&self.dependency_tracker), // Pass a clone of the dependency tracker Arc
         )
     }
 

@@ -1,4 +1,4 @@
-.PHONY: w b
+.PHONY: w b test
 
 define DEBUGBUILDNOTIF
     ____       __                   ____        _ __    __
@@ -15,3 +15,6 @@ w:
 
 b:
 	cargo build
+
+test:
+	cargo test
