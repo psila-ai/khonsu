@@ -3,42 +3,49 @@
 ## What Works
 
 - Initial project setup and memory bank documentation.
-- Core STM data structures (`VersionedValue`, `SkipMap`-based Transaction Buffer (TxnBuffer)).
-- Basic `Transaction` struct and methods (`read`, `write`, `delete`, `commit`, `rollback`).
+- Core STM data structures (`VersionedValue`, `RwLock<HashMap>`-based Transaction Buffer (`TxnBuffer`)).
+- `Transaction` struct and methods (`read`, `write`, `delete`, `commit`, `rollback`).
 - `Khonsu` struct and transaction start API.
-- Basic commit process with conflict detection and resolution strategies (`Fail`, `Ignore`, `Replace`, `Append`).
+- Commit process with conflict detection (OCC for ReadCommitted/RepeatableRead) and resolution strategies (`Fail`, `Ignore`, `Replace`, `Append`).
 - Rollback functionality.
-- Basic logic for different `TransactionIsolation` levels within conflict detection.
-- `Storage` trait definition and a `MockStorage` implementation integrated into the commit process.
-- Helper functions for manual Arrow array manipulation (`merge_record_batches`) with support for basic data types.
+- `Storage` trait definition and `MockStorage` implementation integrated into commit.
+- Helper functions for manual Arrow array manipulation (`merge_record_batches`).
 - Defined error types in `errors.rs`.
-- Basic test cases for core transaction operations.
-- Transaction dependency tracking data structures (`DependencyTracker`, `ItemDependency`, `DataItem`) defined.
-- Integration of `DependencyTracker` into `Khonsu` and `Transaction`.
-- Placeholder methods for recording dependencies (`record_read`, `record_write`) and cycle detection (`check_for_cycles`) in `DependencyTracker`.
+- **Serializable Snapshot Isolation (SSI) Implementation (Initial):**
+    - `DependencyTracker` now tracks transaction states (`Active`, `Committed`, `Aborted`), timestamps, and recently committed write sets (`TransactionInfo`).
+    - `validate_serializability` function implements SSI backward (SI read) and forward (dangerous RW structure) checks.
+    - Transaction lifecycle (`new`, `commit`, `rollback`) integrates with `DependencyTracker` for state updates.
+    - Basic garbage collection for old transaction info in `DependencyTracker`.
+    - `record_read` and `record_write` update active dependencies in `item_dependencies`.
+    - `remove_active_dependencies` cleans up `item_dependencies` on commit/abort.
+- **Basic Test Suite:** Core transaction operations and specific SSI conflict scenarios (`wrw`, `rw`, `ww`, dependency removal) are tested and passing after aligning test expectations with SSI behavior.
 
 ## What's Left to Build
 
-- Full implementation of transaction dependency recording logic in `DependencyTracker` (handling concurrent updates and version tracking).
-- Implementation of the serializability validation algorithm (cycle detection) in `DependencyTracker::check_for_cycles`.
-- Integration of serializability validation into the `Transaction::commit` process for Serializable transactions.
-- Implementation of methods for removing dependencies of committed or aborted transactions from the `DependencyTracker`.
-- Comprehensive test cases for different isolation levels, conflict resolution strategies, and concurrent scenarios, especially for Serializable isolation.
-- Complete implementation of the `TwoPhaseCommitParticipant` trait.
-- Refinement of memory reclamation, particularly for the dependency tracking data structures.
-- Full distributed commit functionality (future phase).
+- **Refine SSI Implementation:**
+    - Improve backward validation for deleted items (currently heuristic).
+    - Optimize SSI validation performance.
+    - Refine garbage collection strategy and memory usage for `DependencyTracker`.
+- **Comprehensive SSI Tests:** Add more tests covering diverse interleavings, edge cases, and concurrent scenarios for SSI.
+- **Implement `TwoPhaseCommitParticipant`:** Complete the trait implementation for distributed commit protocols.
+- **Refine Memory Reclamation:** Review overall memory management, especially for `DependencyTracker`.
+- **Distributed Commit Functionality:** Implement the full distributed commit protocol (future phase).
+- **Address `TODO`s:** Review and address any remaining `TODO` comments in the codebase.
 
 ## Current Status
 
-The project has completed the initial core STM implementation and is currently focused on implementing full Serializable isolation by adding transaction dependency tracking and validation.
+The project has implemented an initial version of Serializable Snapshot Isolation (SSI) for the `Serializable` isolation level. The core logic is in place within `DependencyTracker` and integrated into the `Transaction` lifecycle. The existing test suite passes after adjustments to align with SSI principles. Focus is now on refining the SSI implementation and expanding test coverage.
 
 ## Known Issues
 
-- Compilation errors in `src/dependency_tracking.rs` related to using `errors::Error` and potential issues with the read-modify-write loop for updating `ItemDependency` in the `SkipMap` (due to limitations of `crossbeam-skiplist` version 0.1).
+- The backward validation check for items deleted concurrently relies on a heuristic and needs improvement (requires tracking deletion timestamps or similar).
+- Performance implications of SSI validation and `DependencyTracker` state management haven't been thoroughly evaluated.
+- Garbage collection for `DependencyTracker` is basic and might need refinement based on usage patterns.
 
 ## Evolution of Project Decisions
 
-- Decision to use Rust and Arrow remains central.
-- Commitment to lock-free internals and minimum allocation continues to influence design.
-- Decision made to implement full Serializable isolation now, requiring the introduction of transaction dependency tracking and a validation algorithm, which is a significant architectural addition.
-- Using `crossbeam-skiplist` version 0.1 presents challenges for atomic read-modify-write operations needed for dependency tracking, requiring careful implementation with potential limitations.
+- Shifted from simple cycle detection/OCC for Serializable to implementing standard Serializable Snapshot Isolation (SSI).
+- Refactored validation logic, centralizing SSI checks in `DependencyTracker::validate_serializability` and simplifying `detect_conflicts`.
+- Adjusted test expectations to match the guarantees provided by SSI.
+- `DependencyTracker` now holds more state (`TransactionInfo`) to support SSI validation.
+- `TxnBuffer` implementation confirmed as `RwLock<HashMap>`, not `SkipMap` as mentioned in older memory bank entries.
