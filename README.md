@@ -30,7 +30,6 @@ To use Khonsu in your Rust project, add it as a dependency in your `Cargo.toml`:
 ```toml
 [dependencies]
 khonsu = "0.1.0" # Replace with the actual version
-arrow = { version = "55.0.0", features = ["prettyprint"] } # Example Arrow dependency
 ```
 
 ## Example
