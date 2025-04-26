@@ -7,44 +7,77 @@ use std::time::{Duration, Instant}; // Needed for cleanup timing
 use crate::data_store::txn_buffer::TxnBuffer; // Keep this import
 use crate::errors::*;
 
-/// Represents the state of a transaction being tracked.
+/// Represents the state of a transaction being tracked within the `DependencyTracker`.
+///
+/// This enum is used to indicate the current lifecycle stage of a transaction,
+/// which is crucial for correctly applying Serializable Snapshot Isolation (SSI)
+/// validation rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TxnState {
+    /// The transaction is currently active and has not yet attempted to commit or abort.
     Active,
+    /// The transaction has successfully committed.
     Committed,
+    /// The transaction has been aborted.
     Aborted,
 }
 
 /// Holds information about a transaction relevant for SSI validation.
+///
+/// The `DependencyTracker` stores instances of this struct to keep track of
+/// the state and relevant metadata for each transaction, enabling the detection
+/// of serialization anomalies.
 #[derive(Debug, Clone)]
 pub(crate) struct TransactionInfo {
+    /// The current state of the transaction (`Active`, `Committed`, or `Aborted`).
     pub(crate) state: TxnState,
+    /// The timestamp when the transaction started (typically its unique transaction ID).
     pub(crate) start_ts: u64, // Transaction ID acts as start timestamp
+    /// The timestamp when the transaction committed, if applicable.
     pub(crate) commit_ts: Option<u64>,
-    // Keep track of writes for forward validation against committed transactions
+    /// The set of keys that this transaction wrote to upon successful commit.
+    /// This is used for forward validation against committed transactions.
     pub(crate) write_set_keys: Option<HashSet<String>>,
+    /// The time when this `TransactionInfo` was created, used for garbage collection.
     pub(crate) creation_time: Instant, // For cleanup purposes
 }
 
 /// Represents a data item for dependency tracking purposes.
+///
+/// This struct identifies a specific piece of data within the transaction
+/// buffer that transactions might read from or write to. It is used by the
+/// `DependencyTracker` to record dependencies.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct DataItem {
+    /// The unique key identifying the data item.
     pub key: String,
     // Potentially other relevant data item information (e.g., version)
 }
 
 /// Tracks readers and writers for a specific data item, including versions.
+///
+/// This struct is stored within the `item_dependencies` map of the
+/// `DependencyTracker` and records which active transactions have read
+/// or are intending to write to the associated data item.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ItemDependency {
-    // Map from *active* reader transaction ID to the version they read.
+    /// Map from *active* reader transaction ID to the version they read.
+    /// This is used for backward validation in SSI.
     pub(crate) readers: HashMap<u64, u64>,
-    // Set of *active* writer transaction IDs.
+    /// Set of *active* writer transaction IDs.
+    /// This is used for forward validation in SSI.
     pub(crate) writers: HashSet<u64>,
 }
 
 /// A concurrent data structure to track transaction dependencies for SSI validation.
+///
+/// The `DependencyTracker` is responsible for maintaining information about
+/// active, committed, and aborted transactions, as well as tracking read and
+/// write dependencies between active transactions and data items. This information
+/// is used to perform Serializable Snapshot Isolation (SSI) validation during
+/// transaction commit.
 pub struct DependencyTracker {
-    // Tracks state (Active/Committed/Aborted) and timestamps for transactions.
+    /// Tracks state (`Active`, `Committed`, `Aborted`) and timestamps for transactions.
     // Key: Transaction ID (start_ts)
     transactions: RwLock<HashMap<u64, TransactionInfo>>,
     // Tracks which *active* transactions are reading/writing specific items.
@@ -59,6 +92,7 @@ pub struct DependencyTracker {
 }
 
 impl Default for DependencyTracker {
+    /// Creates a new `DependencyTracker` with default configuration.
     fn default() -> Self {
         Self::new()
     }
@@ -66,6 +100,21 @@ impl Default for DependencyTracker {
 
 impl DependencyTracker {
     /// Creates a new `DependencyTracker`.
+    ///
+    /// Initializes the internal data structures and configuration for tracking
+    /// transaction dependencies and performing SSI validation.
+    ///
+    /// # Returns
+    ///
+    /// A new `DependencyTracker` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    ///
+    /// let dependency_tracker = DependencyTracker::new();
+    /// ```
     pub fn new() -> Self {
         Self {
             transactions: RwLock::new(HashMap::new()),
@@ -77,6 +126,25 @@ impl DependencyTracker {
     }
 
     /// Registers a new transaction as Active.
+    ///
+    /// This method is called when a transaction starts. It adds the transaction
+    /// to the tracker's internal state with the `Active` status and records
+    /// its start timestamp.
+    ///
+    /// # Arguments
+    ///
+    /// * `txn_id` - The unique identifier of the transaction to register.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    ///
+    /// let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// let transaction_id = 1; // Example transaction ID
+    /// dependency_tracker.register_txn(transaction_id);
+    /// ```
     pub fn register_txn(&self, txn_id: u64) {
         let info = TransactionInfo {
             state: TxnState::Active,
@@ -91,6 +159,35 @@ impl DependencyTracker {
     }
 
     /// Marks a transaction as Committed. Stores write set keys for recent commits.
+    ///
+    /// This method is called when a transaction successfully commits. It updates
+    /// the transaction's state to `Committed`, records its commit timestamp,
+    /// and stores the set of keys it wrote to. It also removes the transaction's
+    /// active dependencies from the `item_dependencies` map.
+    ///
+    /// # Arguments
+    ///
+    /// * `txn_id` - The unique identifier of the transaction to mark as committed.
+    /// * `commit_ts` - The timestamp assigned to the transaction at commit time.
+    /// * `write_set_keys` - The set of keys that the transaction wrote to.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    /// use ahash::AHashSet as HashSet;
+    ///
+    /// # let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// let transaction_id = 1;
+    /// let commit_timestamp = 100; // Example commit timestamp
+    /// let write_keys: HashSet<String> = vec!["key1".to_string(), "key2".to_string()].into_iter().collect();
+    ///
+    /// // Assuming the transaction was previously registered as active.
+    /// // dependency_tracker.register_txn(transaction_id);
+    ///
+    /// dependency_tracker.mark_committed(transaction_id, commit_timestamp, write_keys);
+    /// ```
     pub fn mark_committed(&self, txn_id: u64, commit_ts: u64, write_set_keys: HashSet<String>) {
         let found = {
             // Scope the write lock
@@ -121,6 +218,29 @@ impl DependencyTracker {
     }
 
     /// Marks a transaction as Aborted.
+    ///
+    /// This method is called when a transaction is rolled back or fails to commit.
+    /// It updates the transaction's state to `Aborted` and removes its active
+    /// dependencies from the `item_dependencies` map.
+    ///
+    /// # Arguments
+    ///
+    /// * `txn_id` - The unique identifier of the transaction to mark as aborted.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    ///
+    /// # let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// let transaction_id = 2; // Example transaction ID
+    ///
+    /// // Assuming the transaction was previously registered as active.
+    /// // dependency_tracker.register_txn(transaction_id);
+    ///
+    /// dependency_tracker.mark_aborted(transaction_id);
+    /// ```
     pub fn mark_aborted(&self, txn_id: u64) {
         let found = {
             // Scope the write lock
@@ -147,6 +267,33 @@ impl DependencyTracker {
     }
 
     /// Records that an *active* transaction read a data item at a specific version.
+    ///
+    /// This method is called by an active transaction when it reads a data item.
+    /// It records the transaction ID and the version of the data item that was read.
+    /// This information is used for backward validation (SI Read Check) during SSI.
+    ///
+    /// # Arguments
+    ///
+    /// * `reader_id` - The ID of the transaction that performed the read.
+    /// * `data_item` - The `DataItem` that was read.
+    /// * `read_version` - The version of the data item that was read.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    ///
+    /// # let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// let reader_transaction_id = 3; // Example reader transaction ID
+    /// let item = DataItem { key: "some_key".to_string() };
+    /// let version_read = 5; // Example version read
+    ///
+    /// // Assuming the reader transaction is active.
+    /// // dependency_tracker.register_txn(reader_transaction_id);
+    ///
+    /// dependency_tracker.record_read(reader_transaction_id, item, version_read);
+    /// ```
     pub fn record_read(&self, reader_id: u64, data_item: DataItem, read_version: u64) {
         if self
             .transactions
@@ -165,6 +312,33 @@ impl DependencyTracker {
     }
 
     /// Records that an *active* transaction intends to write to a data item.
+    ///
+    /// This method is called by an active transaction when it stages a write
+    /// operation for a data item. It records the transaction ID as an active
+    /// writer for the specified data item. This information is used for forward
+    /// validation (RW-Dependency Check) during SSI.
+    ///
+    /// # Arguments
+    ///
+    /// * `writer_id` - The ID of the transaction that intends to write.
+    /// * `data_item` - The `DataItem` that the transaction intends to write to.
+    /// * `_write_version` - The intended version of the write (currently unused).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    ///
+    /// # let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// let writer_transaction_id = 4; // Example writer transaction ID
+    /// let item = DataItem { key: "another_key".to_string() };
+    ///
+    /// // Assuming the writer transaction is active.
+    /// // dependency_tracker.register_txn(writer_transaction_id);
+    ///
+    /// dependency_tracker.record_write(writer_transaction_id, item, 0); // Version is currently unused
+    /// ```
     pub fn record_write(&self, writer_id: u64, data_item: DataItem, _write_version: u64) {
         if self
             .transactions
@@ -183,6 +357,78 @@ impl DependencyTracker {
     }
 
     /// Validates serializability using SSI principles.
+    ///
+    /// This is the core SSI validation logic. It performs two main checks:
+    /// 1.  **Backward Validation (SI Read Check):** Ensures that no data item
+    ///     read by the committing transaction was overwritten by another transaction
+    ///     that committed *after* the committing transaction started.
+    /// 2.  **Forward Validation (RW-Dependency Check):** Detects dangerous read-write
+    ///     dependency cycles involving the committing transaction and other
+    ///     concurrent (active or recently committed) transactions. Specifically,
+    ///     it checks for the existence of both an incoming RW edge (T_concurrent
+    ///     writes x, T_commit reads x) and an outgoing RW edge (T_commit writes y,
+    ///     T_active reads y).
+    ///
+    /// If either of these checks fails, the transaction cannot be committed
+    /// under Serializable isolation.
+    ///
+    /// # Arguments
+    ///
+    /// * `committing_tx_id` - The ID of the transaction attempting to commit.
+    /// * `_commit_ts` - The timestamp assigned to the transaction at commit time
+    ///   (currently not strictly needed for the basic SI backward check).
+    /// * `read_set` - The read set of the committing transaction (keys and versions read).
+    /// * `write_set` - The write set of the committing transaction (keys written).
+    /// * `txn_buffer` - A reference to the shared `TxnBuffer` for checking current versions.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(true)` if the transaction passes SSI validation and can commit.
+    /// Returns `Ok(false)` if the transaction fails SSI validation due to a
+    /// serialization anomaly.
+    /// Returns `Err(KhonsuError)` if an error occurs during validation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KhonsuError` if an internal error occurs during the validation process.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use khonsu::prelude::*;
+    /// use std::sync::Arc;
+    /// use ahash::{AHashMap as HashMap, AHashSet as HashSet};
+    ///
+    /// # let dependency_tracker = Arc::new(DependencyTracker::new());
+    /// # let txn_buffer = Arc::new(TxnBuffer::new());
+    /// let committing_transaction_id = 5; // Example transaction ID
+    /// let commit_timestamp = 200; // Example commit timestamp
+    /// let read_keys: HashMap<String, u64> = vec![("key_a".to_string(), 10)].into_iter().collect(); // Example read set
+    /// let write_keys: HashSet<String> = vec!["key_b".to_string()].into_iter().collect(); // Example write set
+    ///
+    /// // Assuming the transaction is active and dependencies have been recorded.
+    /// // dependency_tracker.register_txn(committing_transaction_id);
+    /// // dependency_tracker.record_read(...);
+    /// // dependency_tracker.record_write(...);
+    ///
+    /// match dependency_tracker.validate_serializability(
+    ///     committing_transaction_id,
+    ///     commit_timestamp,
+    ///     &read_keys,
+    ///     &write_keys,
+    ///     &txn_buffer,
+    /// ) {
+    ///     Ok(true) => {
+    ///         println!("Transaction {} passed SSI validation.", committing_transaction_id);
+    ///     }
+    ///     Ok(false) => {
+    ///         eprintln!("Transaction {} failed SSI validation.", committing_transaction_id);
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Error during SSI validation: {}", e);
+    ///     }
+    /// }
+    /// ```
     pub fn validate_serializability(
         &self,
         committing_tx_id: u64,
@@ -341,7 +587,14 @@ impl DependencyTracker {
     }
 
     /// Removes a transaction's read/write entries from the item_dependencies map.
-    /// Called after commit or abort.
+    ///
+    /// This private helper method is called after a transaction commits or aborts
+    /// to clean up its entries in the `item_dependencies` map. This is important
+    /// for removing dependencies involving inactive transactions.
+    ///
+    /// # Arguments
+    ///
+    /// * `tx_id` - The ID of the transaction whose dependencies should be removed.
     fn remove_active_dependencies(&self, tx_id: u64) {
         let mut item_dependencies = self.item_dependencies.write();
         let keys_to_check: Vec<String> = item_dependencies.keys().cloned().collect();
@@ -364,6 +617,10 @@ impl DependencyTracker {
     }
 
     /// Periodically checks and removes old transaction info.
+    ///
+    /// This private helper method is called after certain operations to
+    /// probabilistically trigger a cleanup of old transaction information
+    /// from the `transactions` map.
     fn maybe_trigger_cleanup(&self) {
         let count = self.cleanup_counter.fetch_add(1, Ordering::Relaxed);
         if count >= self.cleanup_threshold {
@@ -373,6 +630,11 @@ impl DependencyTracker {
     }
 
     /// Removes info for transactions older than max_txn_age.
+    ///
+    /// This private helper method performs the actual garbage collection of
+    /// old transaction information from the `transactions` map. It retains
+    /// active transactions and recently committed/aborted ones based on
+    /// the configured `max_txn_age`.
     fn cleanup_old_txns(&self) {
         let now = Instant::now();
         let mut transactions = self.transactions.write();

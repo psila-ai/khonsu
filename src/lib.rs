@@ -1,48 +1,165 @@
+//! Khonsu: A Software Transactional Memory (STM) Library in Rust
+//!
+//! Khonsu is a Rust library providing Software Transactional Memory (STM) capabilities.
+//! It is designed to enable concurrent access to shared mutable data without relying
+//! on traditional locking mechanisms, aiming for high performance and reduced contention.
+//!
+//! The library integrates with the Apache Arrow data format for efficient handling
+//! of tabular data (RecordBatches) within transactions. It supports row-level
+//! operations (create, update, delete) and provides configurable transaction
+//! isolation levels and conflict resolution strategies.
+//!
+//! ## Features
+//!
+//! - **Software Transactional Memory:** Manage concurrent access to shared data using transactions.
+//! - **Arrow Integration:** Work with data represented as Arrow RecordBatches.
+//! - **Row-Level Operations:** Perform create, update, and delete operations on data within transactions.
+//! - **Multiple RecordBatches per Transaction:** Handle complex transactions involving multiple data sets.
+//! - **Conflict Detection:** Identify conflicts during the transaction commit phase.
+//! - **Conflict Resolution Strategies:** Configure how conflicts are handled (append, ignore, replace, fail).
+//! - **Transaction Rollback:** Ensure atomicity with complete rollback on transaction abort.
+//! - **Configurable Isolation Levels:** Support Read Committed, Repeatable Read, and Serializable isolation.
+//! - **Serializable Snapshot Isolation (SSI):** Implementation of SSI for the Serializable isolation level.
+//! - **Extensible Design:** Designed with future support for distributed commit in mind.
+//!
+//! ## Architecture Overview
+//!
+//! The core components of Khonsu include:
+//!
+//! - [`Khonsu`]: The main entry point for the STM system, responsible for starting transactions.
+//! - [`Transaction`]: Represents an ongoing unit of work, managing its read and write sets.
+//! - [`TxnBuffer`]: The in-memory buffer holding the current state of the data.
+//! - [`VersionedValue`]: Wraps data items with version information for concurrency control.
+//! - [`DependencyTracker`]: Tracks transaction dependencies for SSI validation.
+//! - Conflict Detection and Resolution modules: Handle identifying and resolving transaction conflicts.
+//! - [`Storage`]: A trait for interacting with durable storage.
+//! - [`TwoPhaseCommitParticipant`]: A trait for integrating with distributed commit protocols.
+//!
+//! ## Getting Started
+//!
+//! To use Khonsu, add it as a dependency to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! khonsu = "0.1.0" # Replace with the actual version
+//! ```
+//!
+//! ## Example Usage
+//!
+//! ```no_run
+//! use khonsu::prelude::*;
+//! use std::sync::Arc;
+//! use arrow::record_batch::RecordBatch;
+//! use arrow::array::{Int32Array, StringArray};
+//! use arrow::datatypes::{Schema, Field, DataType};
+//! use ahash::AHashMap as HashMap;
+//!
+//! // Define a mock storage for demonstration
+//! #[derive(Default)]
+//! struct MockStorage {
+//!     data: HashMap<String, RecordBatch>,
+//! }
+//!
+//! impl Storage for MockStorage {
+//!     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+//!         // In a real implementation, this would write to durable storage.
+//!         // For this mock, we do nothing.
+//!         Ok(())
+//!     }
+//! }
+//!
+//! // Create a Khonsu instance
+//! let storage = Arc::new(MockStorage::default());
+//! let isolation = TransactionIsolation::Serializable;
+//! let resolution = ConflictResolution::Fail;
+//! let khonsu = Khonsu::new(storage, isolation, resolution);
+//!
+//! // Start a transaction
+//! let mut transaction = khonsu.start_transaction();
+//!
+//! // Prepare some data as an Arrow RecordBatch
+//! let schema = Arc::new(Schema::new(vec![
+//!     Field::new("id", DataType::Int32, false),
+//!     Field::new("name", DataType::Utf8, false),
+//! ]));
+//! let id_array = Int32Array::from(vec![1, 2]);
+//! let name_array = StringArray::from(vec!["Alice", "Bob"]);
+//! let record_batch = RecordBatch::try_new(
+//!     schema,
+//!     vec![Arc::new(id_array), Arc::new(name_array)],
+//! ).unwrap();
+//!
+//! // Perform a write operation within the transaction
+//! let key = "users".to_string();
+//! transaction.write(key.clone(), record_batch).unwrap();
+//!
+//! // Attempt to commit the transaction
+//! match transaction.commit() {
+//!     Ok(_) => {
+//!         println!("Transaction committed successfully.");
+//!     }
+//!     Err(KhonsuError::TransactionConflict) => {
+//!         eprintln!("Transaction failed due to conflict.");
+//!     }
+//!     Err(e) => {
+//!         eprintln!("Error during transaction: {}", e);
+//!     }
+//! }
+//! ```
+//!
+//! ## Constraints and Considerations
+//!
+//! - The `arrow-compute` feature is not used; arithmetic and scalar operations on Arrow data must be implemented manually.
+//! - No full async runtime like `tokio` is used. If an executor is needed, the `futures` crate with the `executor` feature is used.
+//! - Tests are configured to run single-threaded.
+//! - While the goal is lock-free internals, the current `TxnBuffer` uses `parking_lot::RwLock`. Atomic operations are used where applicable.
+//! - Memory allocation is minimized, especially in performance-critical paths.
+//!
+//! ## Future Work
+//!
+//! - Refine the SSI implementation, including improved handling of deletions and performance optimizations.
+//! - Implement comprehensive SSI test cases.
+//! - Complete the `TwoPhaseCommitParticipant` trait implementation for distributed commit.
+//! - Refine memory reclamation strategies.
+//! - Implement the full distributed commit protocol.
+//! - Address any remaining `TODO` comments in the codebase.
+
 pub mod arrow_utils;
 pub mod conflict;
 pub mod data_store;
 pub mod dependency_tracking;
 pub mod errors;
+pub mod isolation;
 pub mod khonsu;
 pub mod storage;
 pub mod transaction;
-pub mod twopc; // Declare the new module
+pub mod twopc;
 
 // Re-export key types and structs for easier access
+pub use conflict::detection::*;
 pub use conflict::resolution::ConflictResolution;
 pub use data_store::txn_buffer::TxnBuffer;
 pub use data_store::versioned_value::VersionedValue;
 pub use dependency_tracking::DataItem;
 pub use errors::{KhonsuError, Result};
+pub use isolation::TransactionIsolation;
 pub use khonsu::Khonsu;
-pub use storage::Storage;
+pub use storage::*;
 pub use transaction::Transaction;
-pub use twopc::{ParticipantError, TransactionChanges, TwoPhaseCommitParticipant}; // Re-export DataItem
+pub use twopc::{ParticipantError, TransactionChanges, TwoPhaseCommitParticipant};
 
-// Define the TransactionIsolation enum here as it's a core part of the public API
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 ///
-/// Transaction Isolation levels for transaction system
-pub enum TransactionIsolation {
-    ///
-    /// [TransactionIsolation::ReadCommitted] isolation level means that always a committed value will be
-    /// provided for read operations. Values are always read from in-memory cache every time a
-    /// value is accessed. In other words, if the same key is accessed more than once within the
-    /// same transaction, it may have different value every time since global cache memory
-    /// may be updated concurrently by other threads.
-    ReadCommitted,
-    ///
-    /// [TransactionIsolation::RepeatableRead] isolation level means that if a value was read once within transaction,
-    /// then all consecutive reads will provide the same in-transaction value. With this isolation
-    /// level accessed values are stored within in-transaction memory, so consecutive access to
-    /// the same key within the same transaction will always return the value that was previously
-    /// read or updated within this transaction.
-    RepeatableRead,
-    ///
-    /// [TransactionIsolation::Serializable] isolation level means that all transactions occur in a completely isolated fashion,
-    /// as if all transactions in the system had executed serially, one after the other. Read access
-    /// with this level happens the same way as with [TransactionIsolation::RepeatableRead] level.
-    /// However, if some transactions cannot be serially isolated from each other,
-    /// then one winner will be picked and the other transactions in conflict will result with abort.
-    Serializable,
+/// Prelude of the Khonsu.
+pub mod prelude {
+    pub use crate::conflict::detection::*;
+    pub use crate::conflict::resolution::*;
+    pub use crate::data_store::txn_buffer::*;
+    pub use crate::data_store::versioned_value::*;
+    pub use crate::dependency_tracking::*;
+    pub use crate::errors::*;
+    pub use crate::isolation::*;
+    pub use crate::khonsu::Khonsu;
+    pub use crate::storage::*;
+    pub use crate::transaction::Transaction;
+    pub use crate::twopc::*;
 }

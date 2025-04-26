@@ -1,6 +1,11 @@
 // Declare the common module
 mod common;
 
+/// Basic transaction tests for the Khonsu Software Transactional Memory library.
+///
+/// This module contains fundamental tests for transaction creation, basic read,
+/// write, delete, commit, and rollback operations, as well as initial tests
+/// for Serializable isolation conflicts (W-R-W, R-W, W-W) and dependency tracking cleanup.
 use std::sync::Arc;
 
 use arrow::array::{Int64Array, StringArray};
@@ -217,7 +222,6 @@ mod single_threaded_tests {
         let commit_result_tx2 = txn2.commit();
         println!("Tx2 commit result: {:?}", commit_result_tx2);
 
-        // Verify Tx2 commit succeeded
         // Verify Tx2 commit failed (due to backward validation conflict with committed Tx1)
         assert!(commit_result_tx2.is_err());
         if let Err(KhonsuError::TransactionConflict) = commit_result_tx2 {

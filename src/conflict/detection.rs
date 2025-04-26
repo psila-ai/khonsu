@@ -6,6 +6,10 @@ use arrow::record_batch::RecordBatch;
 use log::debug;
 
 /// Represents the type of conflict detected (against committed versions).
+///
+/// This enum is used to categorize the specific type of conflict that occurred
+/// during transaction validation, typically against data that has been committed
+/// by other transactions.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum ConflictType {
     /// The transaction read data that was modified by another committed transaction.
@@ -19,7 +23,87 @@ pub enum ConflictType {
 }
 
 /// Checks for conflicts between a transaction's read/write sets and the transaction buffer.
-/// Implements OCC validation against committed versions for ReadCommitted and RepeatableRead.
+///
+/// This function implements Optimistic Concurrency Control (OCC) validation
+/// against committed versions for `ReadCommitted` and `RepeatableRead` isolation
+/// levels. It compares the versions of data items read and written by the
+/// committing transaction against the current versions in the `TxnBuffer`
+/// to detect conflicts.
+///
+/// For `Serializable` isolation, conflict detection is handled separately
+/// by the `DependencyTracker::validate_serializability` function.
+///
+/// # Arguments
+///
+/// * `committing_tx_id` - The unique identifier (logical start time) of the
+///   transaction attempting to commit.
+/// * `isolation_level` - The `TransactionIsolation` level of the committing transaction.
+/// * `read_set` - A reference to the read set of the committing transaction,
+///   mapping keys to the versions that were read.
+/// * `write_set` - A reference to the write set of the committing transaction,
+///   mapping keys to the staged changes (optional `RecordBatch` for insert/update,
+///   `None` for delete).
+/// * `txn_buffer` - A reference to the shared `TxnBuffer` containing the current
+///   committed state of the data.
+///
+/// # Returns
+///
+/// Returns a `Result` containing a `HashMap` where keys are the data item keys
+/// involved in a conflict, and values are the `ConflictType`. An empty map
+/// indicates no conflicts were detected for the given isolation level.
+///
+/// # Errors
+///
+/// Returns a `KhonsuError` if an error occurs during the conflict detection process.
+///
+/// # Examples
+///
+/// ```no_run
+/// use khonsu::prelude::*;
+/// use std::sync::Arc;
+/// use ahash::AHashMap as HashMap;
+/// use arrow::record_batch::RecordBatch;
+/// use arrow::array::Int32Array;
+/// use arrow::datatypes::{Schema, Field, DataType};
+///
+/// # let txn_buffer = Arc::new(TxnBuffer::new());
+/// let committing_transaction_id = 10; // Example transaction ID
+/// let isolation = TransactionIsolation::RepeatableRead;
+///
+/// // Example read set: read key "data_a" at version 5
+/// let mut read_set: HashMap<String, u64> = HashMap::new();
+/// read_set.insert("data_a".to_string(), 5);
+///
+/// // Example write set: write to key "data_b"
+/// let mut write_set: HashMap<String, Option<RecordBatch>> = HashMap::new();
+/// let schema = Arc::new(Schema::new(vec![Field::new("value", DataType::Int32, false)]));
+/// let value_array = Int32Array::from(vec![123]);
+/// let record_batch = RecordBatch::try_new(schema, vec![Arc::new(value_array)]).unwrap();
+/// write_set.insert("data_b".to_string(), Some(record_batch));
+///
+/// // Assume some data exists in the txn_buffer with versions that might conflict.
+/// // For example, if "data_a" in txn_buffer has version > 5, it's a ReadWrite conflict.
+/// // If "data_b" in txn_buffer has version > committing_transaction_id, it's a WriteWrite conflict.
+///
+/// match detect_conflicts(
+///     committing_transaction_id,
+///     isolation,
+///     &read_set,
+///     &write_set,
+///     &txn_buffer,
+/// ) {
+///     Ok(conflicts) => {
+///         if conflicts.is_empty() {
+///             println!("No conflicts detected for transaction {}.", committing_transaction_id);
+///         } else {
+///             println!("Conflicts detected for transaction {}: {:?}", committing_transaction_id, conflicts);
+///         }
+///     }
+///     Err(e) => {
+///         eprintln!("Error during conflict detection: {}", e);
+///     }
+/// }
+/// ```
 pub fn detect_conflicts(
     committing_tx_id: u64, // Represents the transaction's logical start time for OCC
     isolation_level: TransactionIsolation,

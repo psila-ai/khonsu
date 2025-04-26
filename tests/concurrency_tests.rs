@@ -1,6 +1,12 @@
 // Declare the common module *within this test crate*
 mod common;
 
+/// Concurrency tests for the Khonsu Software Transactional Memory library.
+///
+/// This module contains tests designed to verify the correctness of the STM
+/// implementation under concurrent access, particularly focusing on Serializable
+/// isolation and the detection and handling of various conflict scenarios
+/// using interleaved thread execution.
 use std::sync::{Arc, Barrier};
 use std::thread;
 
@@ -278,9 +284,8 @@ fn test_serializable_wr_conflict_interleaved() {
     let barrier_tx2 = barrier.clone();
     let khonsu_tx2 = khonsu_arc.clone();
 
-    // Thread 1 (Tx1 - Writer)
+    // Thread 1 (Tx1: R(a) -> W(b))
     let handle1 = thread::spawn(move || {
-        // barrier_tx1 moved here
         let mut txn1 = khonsu_tx1.start_transaction();
         let txn1_id = txn1.id();
         println!("Tx1-WR ({}) started.", txn1_id);
@@ -316,9 +321,8 @@ fn test_serializable_wr_conflict_interleaved() {
         write_batch_tx1
     });
 
-    // Thread 2 (Tx2 - Reader)
+    // Thread 2 (Tx2: R(b) -> W(a))
     let handle2 = thread::spawn(move || {
-        // barrier_tx2 moved here
         // Wait for Tx1 to write (Sync Point 1)
         println!("Tx2-WR waiting at Barrier 1.");
         barrier_tx2.wait();

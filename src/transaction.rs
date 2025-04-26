@@ -14,6 +14,11 @@ use crate::storage::{Storage, StorageMutation};
 use crate::TransactionIsolation;
 
 /// Represents a single transaction.
+///
+/// A transaction provides a mechanism for performing a series of read, write,
+/// and delete operations on the data buffer atomically and in isolation.
+/// Transactions are created by the `Khonsu` instance and manage their own
+/// read and write sets.
 pub struct Transaction {
     /// Unique identifier for the transaction (timestamp).
     id: u64,
@@ -38,11 +43,90 @@ pub struct Transaction {
 
 impl Transaction {
     /// Returns the unique identifier of the transaction.
+    ///
+    /// This ID is assigned when the transaction is created and is typically
+    /// a monotonically increasing timestamp.
+    ///
+    /// # Returns
+    ///
+    /// The unique transaction ID as a `u64`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # use arrow::record_batch::RecordBatch;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// #
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let transaction = khonsu.start_transaction();
+    /// let transaction_id = transaction.id();
+    /// println!("Transaction ID: {}", transaction_id);
+    /// ```
     pub fn id(&self) -> u64 {
         self.id
     }
 
     /// Creates a new transaction.
+    ///
+    /// This is typically called internally by the `Khonsu` instance when
+    /// `start_transaction` is invoked. It initializes the transaction's
+    /// state, including its ID, isolation level, and references to shared
+    /// components like the transaction buffer and dependency tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The unique identifier for the transaction.
+    /// * `isolation_level` - The desired `TransactionIsolation` level for this transaction.
+    /// * `txn_buffer` - An `Arc` to the shared `TxnBuffer`.
+    /// * `transaction_counter` - An `Arc` to the global `AtomicU64` transaction counter.
+    /// * `storage` - An `Arc` to the `Storage` implementation.
+    /// * `conflict_resolution` - The `ConflictResolution` strategy for this transaction.
+    /// * `dependency_tracker` - An `Arc` to the shared `DependencyTracker`.
+    ///
+    /// # Returns
+    ///
+    /// A new `Transaction` instance.
     pub fn new(
         id: u64,
         isolation_level: TransactionIsolation,
@@ -68,6 +152,96 @@ impl Transaction {
     }
 
     /// Reads data associated with a key.
+    ///
+    /// This method attempts to read the latest committed version of the data
+    /// associated with the given `key`. If the key has been modified within
+    /// this transaction's write set, the staged change is returned. Otherwise,
+    /// the data is read from the shared transaction buffer.
+    ///
+    /// For `RepeatableRead` and `Serializable` isolation levels, the version
+    /// of the read data is recorded in the transaction's read set for conflict
+    /// detection during commit. For `Serializable`, the read is also recorded
+    /// in the dependency tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A reference to the key of the data item to read.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing an `Option<Arc<RecordBatch>>`.
+    /// - `Ok(Some(record_batch))` if the key exists and the data was read successfully.
+    /// - `Ok(None)` if the key does not exist in the transaction buffer or write set.
+    /// - `Err(KhonsuError)` if an error occurs during the read operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KhonsuError` if the read operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    /// use arrow::record_batch::RecordBatch;
+    /// use arrow::array::{Int32Array, StringArray};
+    /// use arrow::datatypes::{Schema, Field, DataType};
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let mut transaction = khonsu.start_transaction();
+    ///
+    /// let key = "my_data".to_string();
+    /// match transaction.read(&key) {
+    ///     Ok(Some(record_batch)) => {
+    ///         println!("Read data for key {}: {:?}", key, record_batch);
+    ///     }
+    ///     Ok(None) => {
+    ///         println!("Key {} not found.", key);
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Error reading data: {}", e);
+    ///     }
+    /// }
+    /// ```
     pub fn read(&mut self, key: &String) -> Result<Option<Arc<RecordBatch>>> {
         // Check the write set first
         if let Some(change) = self.write_set.get(key) {
@@ -107,6 +281,100 @@ impl Transaction {
     }
 
     /// Stages a write operation for a key with the provided RecordBatch.
+    ///
+    /// This method stages a change to be applied to the data buffer upon
+    /// successful transaction commit. The provided `record_batch` will
+    /// replace any existing data associated with the `key`.
+    ///
+    /// For `Serializable` isolation, a write intention is immediately recorded
+    /// in the dependency tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key of the data item to write.
+    /// * `record_batch` - The `RecordBatch` containing the data to write.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the write operation is staged successfully, and
+    /// `Err(KhonsuError)` if an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KhonsuError` if the write operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    /// use arrow::record_batch::RecordBatch;
+    /// use arrow::array::{Int32Array, StringArray};
+    /// use arrow::datatypes::{Schema, Field, DataType};
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let mut transaction = khonsu.start_transaction();
+    ///
+    /// let key = "my_data".to_string();
+    /// let schema = Arc::new(Schema::new(vec![
+    ///     Field::new("id", DataType::Int32, false),
+    ///     Field::new("name", DataType::Utf8, false),
+    /// ]));
+    /// let id_array = Int32Array::from(vec![1, 2]);
+    /// let name_array = StringArray::from(vec!["Alice", "Bob"]);
+    /// let record_batch = RecordBatch::try_new(
+    ///     schema,
+    ///     vec![Arc::new(id_array), Arc::new(name_array)],
+    /// ).unwrap();
+    ///
+    /// match transaction.write(key.clone(), record_batch) {
+    ///     Ok(_) => {
+    ///         println!("Staged write for key {}.", key);
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Error staging write: {}", e);
+    ///     }
+    /// }
+    /// ```
     pub fn write(&mut self, key: String, record_batch: RecordBatch) -> Result<()> {
         // Record write intention immediately for Serializable isolation
         if self.isolation_level == TransactionIsolation::Serializable {
@@ -120,6 +388,87 @@ impl Transaction {
     }
 
     /// Stages a delete operation for a key.
+    ///
+    /// This method stages the deletion of the data associated with the given
+    /// `key`. The actual deletion from the data buffer occurs upon successful
+    /// transaction commit.
+    ///
+    /// For `Serializable` isolation, a write intention (for deletion) is
+    /// immediately recorded in the dependency tracker.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A reference to the key of the data item to delete.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the delete operation is staged successfully, and
+    /// `Err(KhonsuError)` if an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KhonsuError` if the delete operation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # use arrow::record_batch::RecordBatch;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// #
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let mut transaction = khonsu.start_transaction();
+    ///
+    /// let key = "old_data";
+    /// match transaction.delete(key) {
+    ///     Ok(_) => {
+    ///         println!("Staged deletion for key {}.", key);
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Error staging deletion: {}", e);
+    ///     }
+    /// }
+    /// ```
     pub fn delete(&mut self, key: &str) -> Result<()> {
         let key_string = key.to_string();
         // Record write intention immediately for Serializable isolation
@@ -136,6 +485,112 @@ impl Transaction {
     }
 
     /// Attempts to commit the transaction.
+    ///
+    /// This is the core of the transaction lifecycle. It performs the following steps:
+    /// 1. Assigns a commit timestamp to the transaction.
+    /// 2. Performs validation and conflict detection based on the transaction's
+    ///    isolation level (`ReadCommitted`, `RepeatableRead`, or `Serializable`).
+    ///    - For `Serializable`, it performs Serializable Snapshot Isolation (SSI)
+    ///      validation using the `DependencyTracker`.
+    ///    - For other levels, it performs standard Optimistic Concurrency Control (OCC)
+    ///      checks against the transaction buffer.
+    /// 3. If conflicts are detected (and the isolation level is not `Serializable`
+    ///    where SSI handles conflicts), applies the configured `ConflictResolution`
+    ///    strategy (`Fail`, `Ignore`, `Replace`, `Append`).
+    /// 4. If validation passes and conflicts are resolved (or none existed),
+    ///    atomically applies the staged changes from the write set to the
+    ///    shared transaction buffer.
+    /// 5. Persists the changes to durable storage using the provided `Storage`
+    ///    implementation.
+    /// 6. Marks the transaction as committed in the `DependencyTracker` (for `Serializable`).
+    ///
+    /// If validation fails or conflicts cannot be resolved according to the
+    /// strategy, the transaction is aborted.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the transaction is successfully committed.
+    /// Returns `Err(KhonsuError::TransactionConflict)` if a conflict is detected
+    /// and the resolution strategy is `Fail`.
+    /// Returns `Err(KhonsuError)` for other errors during the commit process.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `KhonsuError` if the commit operation fails due to conflicts
+    /// (with `Fail` resolution) or other internal errors.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    /// use arrow::record_batch::RecordBatch;
+    /// use arrow::array::{Int32Array, StringArray};
+    /// use arrow::datatypes::{Schema, Field, DataType};
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// #
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let mut transaction = khonsu.start_transaction();
+    /// # let txn_id = transaction.id();
+    ///
+    /// // Perform read/write/delete operations...
+    /// let key = "new_data".to_string();
+    /// let schema = Arc::new(Schema::new(vec![Field::new("value", DataType::Int32, false)]));
+    /// let value_array = Int32Array::from(vec![100]);
+    /// let record_batch = RecordBatch::try_new(schema, vec![Arc::new(value_array)]).unwrap();
+    /// transaction.write(key.clone(), record_batch).unwrap();
+    ///
+    /// match transaction.commit() {
+    ///     Ok(_) => {
+    ///         println!("Transaction {} committed successfully.", txn_id);
+    ///     }
+    ///     Err(KhonsuError::TransactionConflict) => {
+    ///         eprintln!("Transaction {} failed due to conflict.", txn_id);
+    ///     }
+    ///     Err(e) => {
+    ///         eprintln!("Error during transaction commit: {}", e);
+    ///     }
+    /// }
+    /// ```
     pub fn commit(self) -> Result<()> {
         // Phase 1: Validation and Conflict Detection
         let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
@@ -255,6 +710,71 @@ impl Transaction {
     }
 
     /// Aborts the transaction, discarding staged changes.
+    ///
+    /// This method rolls back the transaction by discarding all staged changes
+    /// in the write set. The transaction buffer remains unaffected by the
+    /// operations performed within this transaction.
+    ///
+    /// The transaction is marked as aborted in the `DependencyTracker` (for `Serializable`).
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use std::sync::Arc;
+    /// use khonsu::prelude::*;
+    ///
+    /// # use parking_lot::Mutex;
+    /// # use ahash::AHashMap as HashMap;
+    /// # use arrow::record_batch::RecordBatch;
+    /// # #[derive(Debug)] // Added Debug derive
+    /// # pub struct MockStorage {
+    /// #     data: Mutex<HashMap<String, RecordBatch>>,
+    /// # }
+    /// #
+    /// # impl MockStorage {
+    /// #     pub fn new() -> Self {
+    /// #         Self {
+    /// #             data: Mutex::new(HashMap::new()),
+    /// #         }
+    /// #     }
+    /// #
+    /// #     pub fn get(&self, key: &str) -> Option<RecordBatch> {
+    /// #         let data = self.data.lock();
+    /// #         data.get(key).cloned()
+    /// #     }
+    /// # }
+    /// #
+    /// # impl Storage for MockStorage {
+    /// #     fn apply_mutations(&self, mutations: Vec<StorageMutation>) -> Result<()> {
+    /// #         let mut data = self.data.lock();
+    /// #         for mutation in mutations {
+    /// #             match mutation {
+    /// #                 StorageMutation::Insert(key, record_batch) => {
+    /// #                     data.insert(key, record_batch);
+    /// #                 }
+    /// #                 StorageMutation::Delete(key) => {
+    /// #                     data.remove(&key);
+    /// #                 }
+    /// #             }
+    /// #         }
+    /// #         Ok(())
+    /// #     }
+    /// # }
+    /// #
+    /// # let storage = Arc::new(MockStorage::new());
+    /// # let isolation = TransactionIsolation::Serializable;
+    /// # let resolution = ConflictResolution::Fail;
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// let mut transaction = khonsu.start_transaction();
+    /// # let txn_id = transaction.id();
+    ///
+    /// // Perform some operations...
+    /// // transaction.write(...).unwrap();
+    ///
+    /// // Decide to roll back
+    /// transaction.rollback();
+    /// println!("Transaction {} rolled back.", txn_id);
+    /// ```
     pub fn rollback(self) {
         debug!("Transaction {} rolled back", self.id);
         // Mark as aborted in tracker
