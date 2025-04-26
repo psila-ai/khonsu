@@ -101,7 +101,8 @@ impl Khonsu {
     /// #         Ok(())
     /// #     }
     /// # }
-    /// // Assuming MockStorage, TransactionIsolation, and ConflictResolution are defined
+    /// // Assuming MockStorage (or your own storage integration), 
+    /// // TransactionIsolation, and ConflictResolution are defined
     /// // and available in your scope.
     /// let storage = Arc::new(MockStorage::new());
     /// let isolation = TransactionIsolation::Serializable;

@@ -1,4 +1,6 @@
-//! Khonsu: A Software Transactional Memory (STM) Library in Rust
+#![doc(html_logo_url = "https://github.com/Jet-Engine/khonsu/raw/master/art/khonsu.jpg")]
+
+//! **Khonsu: A Software Transactional Memory (STM) Library in Rust**
 //!
 //! Khonsu is a Rust library providing Software Transactional Memory (STM) capabilities.
 //! It is designed to enable concurrent access to shared mutable data without relying
@@ -109,10 +111,7 @@
 //!
 //! ## Constraints and Considerations
 //!
-//! - The `arrow-compute` feature is not used; arithmetic and scalar operations on Arrow data must be implemented manually.
-//! - No full async runtime like `tokio` is used. If an executor is needed, the `futures` crate with the `executor` feature is used.
-//! - Tests are configured to run single-threaded.
-//! - While the goal is lock-free internals, the current `TxnBuffer` uses `parking_lot::RwLock`. Atomic operations are used where applicable.
+//! - Goal is lock-free internals, Atomic operations are used where applicable.
 //! - Memory allocation is minimized, especially in performance-critical paths.
 //!
 //! ## Future Work
