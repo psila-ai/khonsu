@@ -2,11 +2,12 @@
 
 //! **Khonsu: A Software Transactional Memory (STM) Library in Rust**
 //!
-//! Khonsu is a Rust library providing Software Transactional Memory (STM) capabilities.
+//! **Khonsu** is a Rust library providing Software Transactional Memory (STM) capabilities.
 //! It is designed to enable concurrent access to shared mutable data without relying
 //! on traditional locking mechanisms, aiming for high performance and reduced contention.
+//! **Khonsu** is built on top of an MVCC system.
 //!
-//! The library integrates with the Apache Arrow data format for efficient handling
+//! The library integrates with the [Apache Arrow](https://arrow.apache.org/) data format for efficient handling
 //! of tabular data (RecordBatches) within transactions. It supports row-level
 //! operations (create, update, delete) and provides configurable transaction
 //! isolation levels and conflict resolution strategies.
@@ -22,24 +23,24 @@
 //! - **Transaction Rollback:** Ensure atomicity with complete rollback on transaction abort.
 //! - **Configurable Isolation Levels:** Support Read Committed, Repeatable Read, and Serializable isolation.
 //! - **Serializable Snapshot Isolation (SSI):** Implementation of SSI for the Serializable isolation level.
-//! - **Extensible Design:** Designed with future support for distributed commit in mind.
+//! - **Extensible Design:** Designed with support for distributed commit in mind.
 //!
 //! ## Architecture Overview
 //!
-//! The core components of Khonsu include:
+//! The core components of **Khonsu** include:
 //!
 //! - [`Khonsu`]: The main entry point for the STM system, responsible for starting transactions.
 //! - [`Transaction`]: Represents an ongoing unit of work, managing its read and write sets.
 //! - [`TxnBuffer`]: The in-memory buffer holding the current state of the data.
 //! - [`VersionedValue`]: Wraps data items with version information for concurrency control.
-//! - [`DependencyTracker`]: Tracks transaction dependencies for SSI validation.
-//! - Conflict Detection and Resolution modules: Handle identifying and resolving transaction conflicts.
+//! - **DependencyTracker**: Tracks transaction dependencies for SSI validation.
+//! - **Conflict Detection and Resolution** modules: Handle identifying and resolving transaction conflicts.
 //! - [`Storage`]: A trait for interacting with durable storage.
 //! - [`TwoPhaseCommitParticipant`]: A trait for integrating with distributed commit protocols.
 //!
 //! ## Getting Started
 //!
-//! To use Khonsu, add it as a dependency to your `Cargo.toml`:
+//! To use **Khonsu**, add it as a dependency to your `Cargo.toml`:
 //!
 //! ```toml
 //! [dependencies]
@@ -114,24 +115,70 @@
 //! - Goal is lock-free internals, Atomic operations are used where applicable.
 //! - Memory allocation is minimized, especially in performance-critical paths.
 //!
-//! ## Future Work
+//! ## References of Khonsu Implementation
+//! Below you can find the research papers and various serializable checking mechanisms that is implemented in Khonsu.
+//! ```
+//! @inproceedings{bailis2014highly,
+//!   title={Highly available transactions: Virtues and limitations},
+//!   author={Bailis, Peter and Ghodsi, Ali and Hellerstein, Joseph M and Stoica, Ion},
+//!   booktitle={Proceedings of the VLDB Endowment},
+//!   volume={7},
+//!   number={3},
+//!   pages={245--256},
+//!   year={2014},
+//!   organization={VLDB Endowment}
+//! }
 //!
-//! - Refine the SSI implementation, including improved handling of deletions and performance optimizations.
-//! - Implement comprehensive SSI test cases.
-//! - Complete the `TwoPhaseCommitParticipant` trait implementation for distributed commit.
-//! - Refine memory reclamation strategies.
-//! - Implement the full distributed commit protocol.
-//! - Address any remaining `TODO` comments in the codebase.
+//! @article{fekete2005serializable,
+//!   title={Serializable isolation for snapshot databases},
+//!   author={Fekete, Alan and Greenwood, David and Kingston, Maurice and Rice, Jeff and Storage, Andrew},
+//!   journal={Proc. 29th VLDB Endowment},
+//!   volume={32},
+//!   pages={12},
+//!   year={2005}
+//! }
+//!
+//! @article{herlihy2003composable,
+//!   title={Composable memory transactions},
+//!   author={Herlihy, Maurice and Luchangco, Victor and Moir, Mark and Scherer, William N},
+//!   journal={ACM SIGPLAN Notices},
+//!   volume={38},
+//!   number={10},
+//!   pages={80--96},
+//!   year={2003},
+//!   publisher={ACM}
+//! }
+//! ```
 
+///
+/// Arrow in-mem data management utilities.
 pub mod arrow_utils;
+///
+/// Conflict resolution system.
 pub mod conflict;
+///
+/// Transactional variable storage layer.
 pub mod data_store;
+///
+/// Inter/Intra data dependency tracking
 pub mod dependency_tracking;
+///
+/// Khonsu Errors
 pub mod errors;
+///
+/// Isolation Level definitions
 pub mod isolation;
+///
+/// Khonsu - Transaction Management System
 pub mod khonsu;
+///
+/// Storage agnostic pluggable commit mechanism
 pub mod storage;
+///
+/// Base transaction system
 pub mod transaction;
+///
+/// 2PC Mechanism & Distributed Commit Integration
 pub mod twopc;
 
 // Re-export key types and structs for easier access

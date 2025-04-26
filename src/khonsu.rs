@@ -101,7 +101,7 @@ impl Khonsu {
     /// #         Ok(())
     /// #     }
     /// # }
-    /// // Assuming MockStorage (or your own storage integration), 
+    /// // Assuming MockStorage (or your own storage integration),
     /// // TransactionIsolation, and ConflictResolution are defined
     /// // and available in your scope.
     /// let storage = Arc::new(MockStorage::new());
