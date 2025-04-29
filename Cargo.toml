@@ -12,3 +12,12 @@ arrow = { version = "55", default-features = false }
 thiserror = "2"
 futures = { version = "0.3", features = ["executor"] }
 parking_lot = "0.12"
+rocksdb = { version = "0.21", optional = true } # Add rocksdb dependency
+
+[features]
+default = []
+twopc = ["omnipaxos", "rocksdb"] # Add rocksdb to the twopc feature
+
+[dependencies.omnipaxos]
+git = "https://github.com/haraldng/omnipaxos.git"
+optional = true

@@ -179,7 +179,8 @@ pub mod storage;
 pub mod transaction;
 ///
 /// 2PC Mechanism & Distributed Commit Integration
-pub mod twopc;
+#[cfg(feature = "twopc")]
+pub mod distributed;
 
 // Re-export key types and structs for easier access
 pub use conflict::detection::*;
@@ -192,7 +193,6 @@ pub use isolation::TransactionIsolation;
 pub use khonsu::Khonsu;
 pub use storage::*;
 pub use transaction::Transaction;
-pub use twopc::{ParticipantError, TransactionChanges, TwoPhaseCommitParticipant};
 
 ///
 /// Prelude of the Khonsu.
@@ -207,5 +207,6 @@ pub mod prelude {
     pub use crate::khonsu::Khonsu;
     pub use crate::storage::*;
     pub use crate::transaction::Transaction;
-    pub use crate::twopc::*;
+    #[cfg(feature = "twopc")]
+    pub use crate::distributed::*;
 }

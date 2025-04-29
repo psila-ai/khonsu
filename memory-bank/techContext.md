@@ -12,6 +12,8 @@
 
 ## Technical Constraints
 
+- **`twopc` Feature Flag:** Distributed commit functionality is gated behind the `twopc` feature flag.
+- **Local Write-Ahead Logs (WALs):** Assumes the presence of durable local WALs at each node for logging transaction states and changes.
 - **No `arrow-compute` feature:** Arithmetic and scalar operations on Arrow data must be implemented manually using Arrow's array manipulation capabilities.
 - **No Async Runtime (e.g., Tokio):** The project will not use `tokio` or any other full async runtime. If an executor is needed, the `futures` crate with the `executor` feature will be used.
 - **Single-threaded tests:** Tests should be configured to run on a single thread to avoid potential issues with test infrastructure and focus on the correctness of the STM implementation itself under controlled conditions.
@@ -21,6 +23,7 @@
 ## Dependencies
 
 - `arrow`: For data representation.
+- `omnipaxos`: Used for consensus in the two-phase commit voting phase (gated by the `twopc` feature).
 - `parking_lot`: For `RwLock` used in `TxnBuffer`.
 - `crossbeam-epoch`: For safe memory reclamation in lock-free data structures (used in DependencyTracker).
 - `crossbeam-skiplist`: For the skip map used in the DependencyTracker.

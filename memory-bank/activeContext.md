@@ -2,7 +2,7 @@
 
 ## Current Work Focus
 
-The initial implementation of Serializable Snapshot Isolation (SSI) for the `Serializable` transaction isolation level is complete, and the existing test suite now passes with adjustments made to align test expectations with standard SSI behavior. The focus shifts towards refining the SSI implementation, adding more comprehensive tests, and potentially moving towards distributed commit features.
+The focus has shifted to implementing the distributed commit functionality using a two-phase commit (2PC) protocol, gated by the `twopc` feature flag. This involves integrating the `omnipaxos` crate for the voting phase and managing a shared transaction log built on local write-ahead logs (WALs).
 
 ## Recent Changes
 
@@ -21,14 +21,17 @@ The initial implementation of Serializable Snapshot Isolation (SSI) for the `Ser
 
 ## Next Steps
 
-1.  **Refine SSI Implementation:**
-    *   Improve the heuristic backward check for deleted items (requires deletion timestamp tracking).
-    *   Optimize SSI validation checks (e.g., data structures, lock contention).
-    *   Refine garbage collection logic in `DependencyTracker`.
-2.  **Write Comprehensive SSI Tests:** Add more targeted tests for various SSI conflict scenarios, including different interleavings and edge cases.
-3.  **Implement TwoPhaseCommitParticipant:** Complete the implementation of the `TwoPhaseCommitParticipant` trait for distributed commit integration.
-4.  **Refine Memory Reclamation:** Review memory reclamation, especially concerning the `TransactionInfo` and `ItemDependency` structures.
-5.  **Distributed Commit Functionality:** Implement the full distributed commit protocol (future phase).
+1.  **Add `twopc` feature flag and `omnipaxos` dependency:** Modify `Cargo.toml` to include the feature flag and the necessary dependency.
+2.  **Design and Implement Two-Phase Commit Coordinator:** Create the `TwoPhaseCommitCoordinator` struct to manage the distributed commit process.
+3.  **Implement Shared Transaction Log:** Design and implement the shared transaction log mechanism, leveraging local WALs and `omnipaxos` for consistency.
+4.  **Implement 2PC Protocol Logic:** Implement the initiate, prepare, and commit/abort phases within the `TwoPhaseCommitCoordinator`.
+5.  **Implement `TwoPhaseCommitParticipant` for Khonsu:** Complete the implementation of the trait for the local Khonsu instance, including WAL interactions for voting and completion.
+6.  **Integrate Coordinator with Khonsu:** Modify the `Khonsu` struct to interact with the `TwoPhaseCommitCoordinator`.
+7.  **Implement Error Handling and Recovery:** Add robust error handling and recovery mechanisms based on the shared log and local WALs.
+8.  **Write Comprehensive Distributed Commit Tests:** Add tests for various distributed scenarios, including failures.
+9.  **Refine SSI Implementation:** (Remaining from previous focus) Improve backward validation for deletions, optimize SSI validation, and refine garbage collection.
+10. **Write Comprehensive SSI Tests:** (Remaining from previous focus) Add more targeted tests for SSI.
+11. **Refine Memory Reclamation:** (Remaining from previous focus) Review overall memory management.
 
 ## Active Decisions and Considerations
 

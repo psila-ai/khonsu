@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The system will follow a typical STM architecture. There will be a shared, globally accessible **Transaction Buffer (TxnBuffer)** in memory that holds the current state of the data for active transactions. Transactions will operate on private copies or views of this data.
+The core system follows a typical STM architecture with a shared in-memory Transaction Buffer (TxnBuffer). For distributed transactions, the system will adopt a two-phase commit (2PC) architecture with a dedicated coordinator and multiple participants. Each participant will manage its local Khonsu instance and stable storage with a write-ahead log (WAL). The shared transaction log for the 2PC protocol will be built upon these local WALs, coordinated by `omnipaxos` for consensus.
 
 ## Key Technical Decisions
 
@@ -21,6 +21,7 @@ The system will follow a typical STM architecture. There will be a shared, globa
 - **Transaction:** Represents an ongoing unit of work. Holds the transaction's read set, write set (staged changes), and configuration (isolation level, resolution strategy).
 - **Storage Trait:** An external trait that the STM system will interact with to **persist** committed data to durable storage. This trait needs to support atomic writes of RecordBatches and will not contain any transaction-specific logic.
 - **TwoPhaseCommitParticipant Trait:** An external trait implemented by the `Khonsu` instance to participate in distributed commit protocols, inspired by `omnipaxos`.
+- **TwoPhaseCommitCoordinator:** A new component responsible for orchestrating the distributed 2PC protocol across multiple participants.
 
 ## Critical Implementation Paths
 

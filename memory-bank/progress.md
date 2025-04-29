@@ -22,19 +22,26 @@
 
 ## What's Left to Build
 
-- **Refine SSI Implementation:**
-    - Improve backward validation for deleted items (currently heuristic).
-    - Optimize SSI validation performance.
-    - Refine garbage collection strategy and memory usage for `DependencyTracker`.
-- **Comprehensive SSI Tests:** Add more tests covering diverse interleavings, edge cases, and concurrent scenarios for SSI.
-- **Implement `TwoPhaseCommitParticipant`:** Complete the trait implementation for distributed commit protocols.
-- **Refine Memory Reclamation:** Review overall memory management, especially for `DependencyTracker`.
-- **Distributed Commit Functionality:** Implement the full distributed commit protocol (future phase).
-- **Address `TODO`s:** Review and address any remaining `TODO` comments in the codebase.
+-   **Distributed Commit Implementation:**
+    -   Add `twopc` feature flag and `omnipaxos` dependency.
+    -   Design and Implement Two-Phase Commit Coordinator.
+    -   Implement Shared Transaction Log (based on local WALs and `omnipaxos`).
+    -   Implement 2PC Protocol Logic (initiate, prepare, commit/abort phases).
+    -   Implement `TwoPhaseCommitParticipant` for Khonsu (including WAL interactions).
+    -   Integrate Coordinator with Khonsu.
+    -   Implement Error Handling and Recovery for distributed transactions.
+    -   Write Comprehensive Distributed Commit Tests.
+-   **Refine SSI Implementation:**
+    -   Improve backward validation for deleted items (currently heuristic).
+    -   Optimize SSI validation performance.
+    -   Refine garbage collection strategy and memory usage for `DependencyTracker`.
+-   **Comprehensive SSI Tests:** Add more targeted tests for various SSI conflict scenarios.
+-   **Refine Memory Reclamation:** Review overall memory management.
+-   **Address `TODO`s:** Review and address any remaining `TODO` comments in the codebase.
 
 ## Current Status
 
-The project has implemented an initial version of Serializable Snapshot Isolation (SSI) for the `Serializable` isolation level. The core logic is in place within `DependencyTracker` and integrated into the `Transaction` lifecycle. The existing test suite passes after adjustments to align with SSI principles. Focus is now on refining the SSI implementation and expanding test coverage.
+The project has shifted focus to implementing the distributed commit functionality using a two-phase commit (2PC) protocol, gated by the `twopc` feature flag and utilizing `omnipaxos` and local WALs. The plan for this implementation is documented. Remaining tasks include completing the distributed commit implementation, further refining the SSI implementation, adding more comprehensive tests for both features, and refining memory reclamation.
 
 ## Known Issues
 

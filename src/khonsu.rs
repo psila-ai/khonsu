@@ -1,4 +1,3 @@
-use log::debug;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -7,9 +6,7 @@ use crate::data_store::txn_buffer::TxnBuffer;
 use crate::dependency_tracking::DependencyTracker;
 use crate::storage::Storage; // Import the Storage trait
 use crate::transaction::Transaction;
-use crate::{
-    ParticipantError, TransactionChanges, TransactionIsolation, TwoPhaseCommitParticipant,
-}; // Import DependencyTracker
+use crate::TransactionIsolation;
 
 /// Konshu Prelude
 pub mod prelude {
@@ -208,110 +205,4 @@ impl Khonsu {
     }
 
     // TODO: Add methods for registering the TwoPhaseCommitParticipant trait if needed externally.
-}
-
-impl TwoPhaseCommitParticipant for Khonsu {
-    // Using u64 as a simple GlobalTransactionId for now.
-    type GlobalTransactionId = u64;
-
-    /// Prepares a transaction for a two-phase commit protocol.
-    ///
-    /// This method is part of the `TwoPhaseCommitParticipant` trait and is called
-    /// by a transaction coordinator during the prepare phase. It should validate
-    /// the provided changes against the current state of the STM and determine
-    /// if the transaction can be committed.
-    ///
-    /// # Arguments
-    ///
-    /// * `global_tx_id` - The unique identifier for the global transaction.
-    /// * `_changes` - The changes proposed by the transaction.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(true)` if the transaction can be prepared, `Ok(false)` if it
-    /// cannot (e.g., due to conflicts), and `Err(ParticipantError)` if an
-    /// error occurs during the preparation process.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `ParticipantError` if the preparation fails.
-    fn prepare_transaction(
-        &self,
-        global_tx_id: Self::GlobalTransactionId,
-        _changes: TransactionChanges,
-    ) -> std::result::Result<bool, ParticipantError> {
-        // TODO: Implement prepare logic.
-        // This should involve validating the changes against the current state
-        // in the txn_buffer, similar to the first phase of local commit.
-        // Need to check for conflicts based on the isolation level.
-        // If prepared, the changes might need to be temporarily stored,
-        // associated with the global_tx_id, until commit or abort is called.
-        debug!("Prepare transaction: {:?}", global_tx_id);
-        Err(ParticipantError::Other(
-            "Prepare not implemented yet".to_string(),
-        ))
-    }
-
-    /// Commits a prepared transaction in a two-phase commit protocol.
-    ///
-    /// This method is called by a transaction coordinator during the commit phase
-    /// after all participants have successfully prepared. It should atomically
-    /// apply the changes associated with the given global transaction ID to the STM.
-    ///
-    /// # Arguments
-    ///
-    /// * `global_tx_id` - The unique identifier for the global transaction to commit.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the transaction is successfully committed, and
-    /// `Err(ParticipantError)` if an error occurs during the commit process.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `ParticipantError` if the commit fails.
-    fn commit_transaction(
-        &self,
-        global_tx_id: Self::GlobalTransactionId,
-    ) -> std::result::Result<(), ParticipantError> {
-        // TODO: Implement commit logic for a prepared transaction.
-        // This should atomically apply the changes that were prepared
-        // for this global_tx_id to the txn_buffer.
-        debug!("Commit transaction: {:?}", global_tx_id);
-        Err(ParticipantError::Other(
-            "Commit not implemented yet".to_string(),
-        ))
-    }
-
-    /// Aborts a prepared transaction in a two-phase commit protocol.
-    ///
-    /// This method is called by a transaction coordinator if any participant
-    /// fails to prepare or if the coordinator decides to abort the transaction.
-    /// It should discard any staged or prepared changes associated with the
-    /// given global transaction ID.
-    ///
-    /// # Arguments
-    ///
-    /// * `global_tx_id` - The unique identifier for the global transaction to abort.
-    ///
-    /// # Returns
-    ///
-    /// Returns `Ok(())` if the transaction is successfully aborted, and
-    /// `Err(ParticipantError)` if an error occurs during the abort process.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `ParticipantError` if the abort fails.
-    fn abort_transaction(
-        &self,
-        global_tx_id: Self::GlobalTransactionId,
-    ) -> std::result::Result<(), ParticipantError> {
-        // TODO: Implement abort logic for a prepared transaction.
-        // This should discard any staged/prepared changes associated
-        // with this global_tx_id.
-        debug!("Abort transaction: {:?}", global_tx_id);
-        Err(ParticipantError::Other(
-            "Abort not implemented yet".to_string(),
-        ))
-    }
 }
