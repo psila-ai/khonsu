@@ -179,7 +179,7 @@ pub mod storage;
 pub mod transaction;
 ///
 /// 2PC Mechanism & Distributed Commit Integration
-#[cfg(feature = "twopc")]
+#[cfg(feature = "distributed")]
 pub mod distributed;
 
 // Re-export key types and structs for easier access
@@ -207,6 +207,6 @@ pub mod prelude {
     pub use crate::khonsu::Khonsu;
     pub use crate::storage::*;
     pub use crate::transaction::Transaction;
-    #[cfg(feature = "twopc")]
+    #[cfg(feature = "distributed")]
     pub use crate::distributed::*;
 }

@@ -22,14 +22,16 @@
 
 ## What's Left to Build
 
--   **Distributed Commit Implementation:**
-    -   Add `twopc` feature flag and `omnipaxos` dependency.
-    -   Design and Implement Two-Phase Commit Coordinator.
-    -   Implement Shared Transaction Log (based on local WALs and `omnipaxos`).
-    -   Implement 2PC Protocol Logic (initiate, prepare, commit/abort phases).
-    -   Implement `TwoPhaseCommitParticipant` for Khonsu (including WAL interactions).
-    -   Integrate Coordinator with Khonsu.
-    -   Implement Error Handling and Recovery for distributed transactions.
+-   **Distributed Commit Implementation (using Omnipaxos and `DistributedCommitManager`):**
+    -   Ensure `distributed` feature flag and `omnipaxos`, `crossbeam-channel`, `serde` dependencies are added.
+    -   Define Replicated Commit Data Structure (`ReplicatedCommit`) in `src/distributed/mod.rs`.
+    -   Implement Omnipaxos Storage Backend (`DistributedCommitStorage`) in `src/distributed/storage.rs` using a local WAL.
+    -   Implement Omnipaxos Network Layer (`KhonsuNetwork`) in `src/distributed/network.rs` using `crossbeam-channel`.
+    -   Create `DistributedCommitManager` struct within `src/distributed` to encapsulate OmniPaxos logic.
+    -   Integrate `DistributedCommitManager` with Khonsu (Khonsu holds an instance).
+    -   Modify Transaction Commit for Distributed Workflow (Transaction sends proposals to Manager).
+    -   Implement Error Handling and Recovery within the Manager.
+    -   Implement Application of Decided Entries within the Manager's event loop.
     -   Write Comprehensive Distributed Commit Tests.
 -   **Refine SSI Implementation:**
     -   Improve backward validation for deleted items (currently heuristic).
@@ -41,7 +43,7 @@
 
 ## Current Status
 
-The project has shifted focus to implementing the distributed commit functionality using a two-phase commit (2PC) protocol, gated by the `twopc` feature flag and utilizing `omnipaxos` and local WALs. The plan for this implementation is documented. Remaining tasks include completing the distributed commit implementation, further refining the SSI implementation, adding more comprehensive tests for both features, and refining memory reclamation.
+The project has shifted focus to implementing the distributed commit functionality using `omnipaxos` for full consensus and replication, gated by the `distributed` feature flag and utilizing local WALs and `crossbeam-channel` for inter-thread communication. A key constraint is to keep all distributed commit related code within the `src/distributed` module using a `DistributedCommitManager`. The revised plan for this implementation is documented. Remaining tasks include completing the distributed commit implementation, further refining the SSI implementation, adding more comprehensive tests for both features, and refining memory reclamation.
 
 ## Known Issues
 
@@ -56,3 +58,7 @@ The project has shifted focus to implementing the distributed commit functionali
 - Adjusted test expectations to match the guarantees provided by SSI.
 - `DependencyTracker` now holds more state (`TransactionInfo`) to support SSI validation.
 - `TxnBuffer` implementation confirmed as `RwLock<HashMap>`, not `SkipMap` as mentioned in older memory bank entries.
+- Decided to use `omnipaxos` for the full distributed commit process instead of a 2PC approach with `omnipaxos` for voting.
+- Renamed the `twopc` feature flag to `distributed`.
+- Switched from `tokio::sync::mpsc` to `crossbeam-channel` for inter-thread communication.
+- **Constraint:** All distributed commit related code must be encapsulated within the `src/distributed` module and gated by the `distributed` feature flag, managed by a `DistributedCommitManager`.

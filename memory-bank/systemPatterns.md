@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The core system follows a typical STM architecture with a shared in-memory Transaction Buffer (TxnBuffer). For distributed transactions, the system will adopt a two-phase commit (2PC) architecture with a dedicated coordinator and multiple participants. Each participant will manage its local Khonsu instance and stable storage with a write-ahead log (WAL). The shared transaction log for the 2PC protocol will be built upon these local WALs, coordinated by `omnipaxos` for consensus.
+The core system follows a typical STM architecture with a shared in-memory Transaction Buffer (TxnBuffer). For distributed transactions, the system will leverage `omnipaxos` for achieving consensus on transaction commits across multiple nodes. A key architectural constraint is that all distributed commit related logic, including the OmniPaxos instance and its event loop, is encapsulated within a `DistributedCommitManager` residing in the `src/distributed` module. Each node will run its own `DistributedCommitManager` instance, which interacts with the local Khonsu instance and manages stable storage with a write-ahead log (WAL). Transaction commits will be proposed to the `DistributedCommitManager` for replication and ordering via OmniPaxos.
 
 ## Key Technical Decisions
 
@@ -18,14 +18,15 @@ The core system follows a typical STM architecture with a shared in-memory Trans
 
 - **Transaction Manager:** Orchestrates transactions, handles start, commit, and rollback requests. Interacts with the Transaction Buffer (TxnBuffer).
 - **Transaction Buffer (TxnBuffer):** The central in-memory repository for the data, implemented using a `HashMap` protected by `parking_lot::RwLock` for concurrent access and updates. Manages data versioning.
-- **Transaction:** Represents an ongoing unit of work. Holds the transaction's read set, write set (staged changes), and configuration (isolation level, resolution strategy).
+- **Transaction:** Represents an ongoing unit of work. Holds the transaction's read set, write set (staged changes), and configuration (isolation level, resolution strategy). Interacts with the `DistributedCommitManager` for distributed commits.
 - **Storage Trait:** An external trait that the STM system will interact with to **persist** committed data to durable storage. This trait needs to support atomic writes of RecordBatches and will not contain any transaction-specific logic.
-- **TwoPhaseCommitParticipant Trait:** An external trait implemented by the `Khonsu` instance to participate in distributed commit protocols, inspired by `omnipaxos`.
-- **TwoPhaseCommitCoordinator:** A new component responsible for orchestrating the distributed 2PC protocol across multiple participants.
+- **DistributedCommitManager:** A new component within the `src/distributed` module that encapsulates the OmniPaxos instance, its configuration, network communication, and event loop. It receives commit proposals from local transactions, proposes them to OmniPaxos, processes decided entries, and applies changes to the local Khonsu instance and WAL.
+- **Local Khonsu Instance:** Each node will have a local Khonsu instance managing its portion of the data and interacting with its local WAL. It holds an instance of the `DistributedCommitManager` when the `distributed` feature is enabled.
 
 ## Critical Implementation Paths
 
 - **Transaction Start:** Creating a new transaction with its own view/copy of the relevant data based on the isolation level, referencing the Transaction Buffer (TxnBuffer).
 - **Data Access (Read/Write):** Efficiently reading data into the transaction's private space from the Transaction Buffer (TxnBuffer) and staging writes without affecting the buffer immediately.
-- **Commit Process:** The core logic involving validation against the Transaction Buffer (TxnBuffer), conflict detection, resolution, and atomically applying changes to the Transaction Buffer (TxnBuffer).
-- **Rollback Process:** Discarding staged changes and cleaning up transaction resources.
+- **Commit Process (Distributed):** Local validation, sending the commit proposal to the `DistributedCommitManager`, waiting for the OmniPaxos decision, and returning the outcome.
+- **Commit Process (Local - handled by DistributedCommitManager):** Receiving decided commit entries from OmniPaxos, applying the transaction changes to the Transaction Buffer (TxnBuffer), and persisting to the local WAL.
+- **Rollback Process:** Discarding staged changes and cleaning up transaction resources, including handling rollbacks for transactions not decided by `omnipaxos`.

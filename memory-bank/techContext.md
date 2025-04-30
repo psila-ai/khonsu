@@ -5,6 +5,8 @@
 - **Rust:** The primary programming language for its memory safety, performance, and concurrency features.
 - **Arrow:** Used for representing and manipulating tabular data (rows and columns) in the form of RecordBatches.
 - **Atomic Operations:** Leveraging Rust's `std::sync::atomic` for lock-free programming.
+- **OmniPaxos:** Used for achieving consensus on transaction commits in the distributed commit process (gated by the `distributed` feature).
+- **Crossbeam Channels:** Used for inter-thread communication, particularly between the main Khonsu thread and the OmniPaxos event loop thread managed by the `DistributedCommitManager` (gated by the `distributed` feature).
 
 ## Development Setup
 
@@ -12,7 +14,8 @@
 
 ## Technical Constraints
 
-- **`twopc` Feature Flag:** Distributed commit functionality is gated behind the `twopc` feature flag.
+- **`distributed` Feature Flag:** Distributed commit functionality is gated behind the `distributed` feature flag.
+- **Distributed Logic Encapsulation:** All code related to distributed commit, including OmniPaxos instance management, event loop, and communication, must reside entirely within the `src/distributed` module and be gated by the `distributed` feature flag.
 - **Local Write-Ahead Logs (WALs):** Assumes the presence of durable local WALs at each node for logging transaction states and changes.
 - **No `arrow-compute` feature:** Arithmetic and scalar operations on Arrow data must be implemented manually using Arrow's array manipulation capabilities.
 - **No Async Runtime (e.g., Tokio):** The project will not use `tokio` or any other full async runtime. If an executor is needed, the `futures` crate with the `executor` feature will be used.
@@ -23,7 +26,8 @@
 ## Dependencies
 
 - `arrow`: For data representation.
-- `omnipaxos`: Used for consensus in the two-phase commit voting phase (gated by the `twopc` feature).
+- `omnipaxos`: Used for achieving consensus on transaction commits in the distributed commit process (gated by the `distributed` feature).
+- `crossbeam-channel`: Used for inter-thread communication (gated by the `distributed` feature).
 - `parking_lot`: For `RwLock` used in `TxnBuffer`.
 - `crossbeam-epoch`: For safe memory reclamation in lock-free data structures (used in DependencyTracker).
 - `crossbeam-skiplist`: For the skip map used in the DependencyTracker.
