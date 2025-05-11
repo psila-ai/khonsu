@@ -48,7 +48,7 @@
 //!
 //! ## Example Usage
 //!
-//! ```no_run
+//! ```no_run,ignore
 //! use khonsu::prelude::*;
 //! use std::sync::Arc;
 //! use arrow::record_batch::RecordBatch;

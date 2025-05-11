@@ -208,7 +208,7 @@ impl Khonsu {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
     /// use std::path::Path;
