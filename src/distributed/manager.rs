@@ -30,8 +30,6 @@ use crate::transaction::DistributedCommitOutcome;
 
 /// Commands sent to the event loop thread.
 enum ManagerCommand {
-    /// Propose a transaction commit to OmniPaxos.
-    ProposeCommit(ReplicatedCommit),
     /// Shutdown the event loop.
     Shutdown,
 }
@@ -49,18 +47,8 @@ pub struct DistributedCommitManager {
     transaction_receivers: HashMap<GlobalTransactionId, Sender<DistributedCommitOutcome>>,
     // Handle for the event loop thread
     event_loop_handle: JoinHandle<()>,
-    // Local Khonsu components
-    local_txn_buffer: Arc<TxnBuffer>,
-    local_dependency_tracker: Arc<DependencyTracker>,
-    local_storage: Arc<dyn Storage>,
-    // Tokio runtime for async operations
-    runtime: Arc<Runtime>,
-    // Pending transactions (prepared but not yet decided)
-    pending_transactions: Arc<parking_lot::RwLock<HashMap<GlobalTransactionId, ReplicatedCommit>>>,
     // Mutex for transaction_receivers
     transaction_receivers_mutex: Arc<parking_lot::Mutex<()>>,
-    // Two-Phase Commit manager
-    twopc_manager: Arc<TwoPhaseCommitManager>,
 }
 
 impl DistributedCommitManager {
@@ -139,14 +127,14 @@ impl DistributedCommitManager {
         ));
 
         // Clone references for the event loop
-        let event_loop_txn_buffer = Arc::clone(&local_txn_buffer);
-        let event_loop_dependency_tracker = Arc::clone(&local_dependency_tracker);
-        let event_loop_storage = Arc::clone(&local_storage);
-        let event_loop_pending_transactions = Arc::clone(&pending_transactions);
-        let event_loop_transaction_receivers_mutex = Arc::clone(&transaction_receivers_mutex);
+        let event_loop_txn_buffer = local_txn_buffer.clone();
+        let event_loop_dependency_tracker = local_dependency_tracker.clone();
+        let event_loop_storage = local_storage.clone();
+        let event_loop_pending_transactions = pending_transactions.clone();
+        let event_loop_transaction_receivers_mutex = transaction_receivers_mutex.clone();
         let mut event_loop_transaction_receivers = transaction_receivers.clone();
         let event_loop_node_id = node_id;
-        let event_loop_twopc_manager = Arc::clone(&twopc_manager);
+        let event_loop_twopc_manager = twopc_manager.clone();
 
         // Start the event loop thread
         let event_loop_handle = thread::spawn(move || {
@@ -160,34 +148,6 @@ impl DistributedCommitManager {
             loop {
                 // Process commands from the main thread
                 match event_loop_receiver.try_recv() {
-                    Ok(ManagerCommand::ProposeCommit(replicated_commit)) => {
-                        // Store the transaction in pending_transactions
-                        let txn_id = replicated_commit.transaction_id.clone();
-                        event_loop_pending_transactions.write().insert(txn_id.clone(), replicated_commit.clone());
-                        
-                        // Propose the transaction to OmniPaxos
-                        match omnipaxos.append(replicated_commit) {
-                            Ok(_) => {
-                                // Transaction was successfully proposed
-                            },
-                            Err(e) => {
-                                eprintln!("Failed to propose transaction to OmniPaxos: {:?}", e);
-                                
-                                // Notify the transaction that it was aborted
-                                let transaction_receivers_lock = event_loop_transaction_receivers_mutex.lock();
-                                if let Some(sender) = event_loop_transaction_receivers.get(&txn_id) {
-                                    if let Err(e) = sender.send(DistributedCommitOutcome::Aborted) {
-                                        eprintln!("Failed to send abort notification: {}", e);
-                                    }
-                                    event_loop_transaction_receivers.remove(&txn_id);
-                                }
-                                drop(transaction_receivers_lock);
-                                
-                                // Remove from pending transactions
-                                event_loop_pending_transactions.write().remove(&txn_id);
-                            }
-                        }
-                    },
                     Ok(ManagerCommand::Shutdown) => {
                         println!("OmniPaxos event loop shutting down");
                         break;
@@ -294,19 +254,14 @@ impl DistributedCommitManager {
             transaction_sender,
             transaction_receivers,
             event_loop_handle,
-            local_txn_buffer,
-            local_dependency_tracker,
-            local_storage,
-            runtime,
-            pending_transactions,
             transaction_receivers_mutex,
-            twopc_manager,
         })
     }
     
     /// Processes a decided entry from OmniPaxos.
     ///
     /// This method applies the changes from a committed transaction to the local state.
+    #[allow(clippy::too_many_arguments)]
     fn process_decided_entry(
         entry: ReplicatedCommit,
         node_id: NodeId,

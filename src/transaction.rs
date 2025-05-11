@@ -42,7 +42,7 @@ pub struct Transaction {
     /// Reference to the global transaction counter.
     transaction_counter: Arc<AtomicU64>,
     /// Reference to the storage implementation.
-    storage: Arc<dyn Storage>,
+    _storage: Arc<dyn Storage>,
     /// The set of data items read by this transaction and their versions.
     read_set: HashMap<String, u64>,
     /// Staged changes (insertions, updates, deletions) for this transaction.
@@ -172,7 +172,7 @@ impl Transaction {
             isolation_level,
             txn_buffer,
             transaction_counter,
-            storage,
+            _storage: storage,
             read_set: HashMap::new(),
             write_set: HashMap::new(),
             conflict_resolution,
@@ -625,6 +625,7 @@ impl Transaction {
     /// ```
     pub fn commit(self) -> Result<()> {
         // Phase 1: Validation and Conflict Detection
+        #[cfg(not(feature = "distributed"))]
         let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
 
         // Take ownership of write_set early
@@ -866,7 +867,7 @@ impl Transaction {
                 }
             }
 
-            self.storage.apply_mutations(mutations_to_persist)?;
+            self._storage.apply_mutations(mutations_to_persist)?;
 
             // Mark as committed in tracker
             // Pass the cloned write_set_keys

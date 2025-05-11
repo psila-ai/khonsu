@@ -3,7 +3,7 @@ use bincode;
 use omnipaxos::storage::{StopSign, Storage, StorageOp, StorageResult};
 use omnipaxos::ballot_leader_election::Ballot;
 use rocksdb::{Options, WriteBatch, DB};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::path::Path;
 
 use crate::distributed::ReplicatedCommit;
@@ -26,19 +26,19 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
     fn append_entry(&mut self, entry: ReplicatedCommit) -> StorageResult<()> {
         let idx = self.get_log_len()? + self.get_compacted_idx()?;
         let key = format!("{}{}", KEY_LOG_PREFIX, idx);
-        
+
         let encoded = bincode::serialize(&entry)
             .map_err(|e| format!("Failed to serialize entry: {}", e))?;
-            
+
         self.db.put(key, encoded)
             .map_err(|e| format!("Failed to write to RocksDB: {}", e))?;
-            
+
         // Update the last log index
         let last_idx_encoded = bincode::serialize(&idx)
             .map_err(|e| format!("Failed to serialize last log index: {}", e))?;
         self.db.put("last_log_index", last_idx_encoded)
             .map_err(|e| format!("Failed to update last log index: {}", e))?;
-            
+
         Ok(())
     }
 
@@ -46,10 +46,10 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
         if entries.is_empty() {
             return Ok(());
         }
-        
+
         let mut batch = WriteBatch::default();
         let mut current_idx = self.get_log_len()? + self.get_compacted_idx()?;
-        
+
         for entry in entries {
             let key = format!("{}{}", KEY_LOG_PREFIX, current_idx);
             let encoded = bincode::serialize(&entry)
@@ -57,15 +57,15 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
             batch.put(key, encoded);
             current_idx += 1;
         }
-        
+
         // Update the last log index
         let last_idx_encoded = bincode::serialize(&(current_idx - 1))
             .map_err(|e| format!("Failed to serialize last log index: {}", e))?;
         batch.put("last_log_index", last_idx_encoded);
-        
+
         self.db.write(batch)
             .map_err(|e| format!("Failed to write batch to RocksDB: {}", e))?;
-            
+
         Ok(())
     }
 
@@ -73,10 +73,10 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
         if entries.is_empty() {
             return Ok(());
         }
-        
+
         let mut batch = WriteBatch::default();
         let mut current_idx = from_idx;
-        
+
         for entry in entries {
             let key = format!("{}{}", KEY_LOG_PREFIX, current_idx);
             let encoded = bincode::serialize(&entry)
@@ -84,15 +84,15 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
             batch.put(key, encoded);
             current_idx += 1;
         }
-        
+
         // Update the last log index
         let last_idx_encoded = bincode::serialize(&(current_idx - 1))
             .map_err(|e| format!("Failed to serialize last log index: {}", e))?;
         batch.put("last_log_index", last_idx_encoded);
-        
+
         self.db.write(batch)
             .map_err(|e| format!("Failed to write batch to RocksDB: {}", e))?;
-            
+
         Ok(())
     }
 
@@ -102,7 +102,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
             let key = format!("{}{}", KEY_LOG_PREFIX, i);
             let value = self.db.get(&key)
                 .map_err(|e| format!("Failed to read from RocksDB: {}", e))?;
-                
+
             match value {
                 Some(bytes) => {
                     let entry = bincode::deserialize(&bytes)
@@ -124,7 +124,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
     fn get_suffix(&self, from: usize) -> StorageResult<Vec<ReplicatedCommit>> {
         let log_len = self.get_log_len()?;
         let compacted_idx = self.get_compacted_idx()?;
-        
+
         if from >= compacted_idx + log_len {
             Ok(Vec::new())
         } else {
@@ -134,7 +134,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
 
     fn write_atomically(&mut self, ops: Vec<StorageOp<ReplicatedCommit>>) -> StorageResult<()> {
         let mut batch = WriteBatch::default();
-        
+
         for op in ops {
             match op {
                 StorageOp::AppendEntry(entry) => {
@@ -146,7 +146,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                             format!("Failed to serialize entry: {}", e),
                         )))?;
                     batch.put(key, encoded);
-                    
+
                     // Update the last log index
                     let last_idx_encoded = bincode::serialize(&idx)
                         .map_err(|e| Box::new(std::io::Error::new(
@@ -167,7 +167,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                         batch.put(key, encoded);
                         current_idx += 1;
                     }
-                    
+
                     // Update the last log index
                     if current_idx > 0 {
                         let last_idx = current_idx - 1;
@@ -191,7 +191,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                         batch.put(key, encoded);
                         current_idx += 1;
                     }
-                    
+
                     // Update the last log index if needed
                     if current_idx > 0 {
                         let last_idx = current_idx - 1;
@@ -205,7 +205,7 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                             },
                             _ => 0,
                         };
-                            
+
                         if last_idx > current_last_idx {
                             let last_idx_encoded = bincode::serialize(&last_idx)
                                 .map_err(|e| Box::new(std::io::Error::new(
@@ -275,13 +275,13 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                 StorageOp::Trim(idx) => {
                     // Delete all entries from compacted_idx to idx
                     let compacted_idx = self.get_compacted_idx()?;
-                    
+
                     if idx > compacted_idx {
                         for i in compacted_idx..idx {
                             let key = format!("{}{}", KEY_LOG_PREFIX, i);
                             batch.delete(key);
                         }
-                        
+
                         // Update the compacted index
                         let encoded = bincode::serialize(&idx)
                             .map_err(|e| Box::new(std::io::Error::new(
@@ -293,13 +293,13 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                 },
             }
         }
-        
+
         self.db.write(batch)
             .map_err(|e| Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to write batch to RocksDB: {}", e),
             )))?;
-            
+
         Ok(())
     }
 
@@ -314,9 +314,9 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
             },
             _ => 0,
         };
-            
+
         let compacted_idx = self.get_compacted_idx()?;
-        
+
         if last_idx < compacted_idx {
             Ok(0)
         } else {
@@ -447,20 +447,20 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
     fn trim(&mut self, idx: usize) -> StorageResult<()> {
         // Trimming means deleting all entries up to idx
         let compacted_idx = self.get_compacted_idx()?;
-        
+
         if idx <= compacted_idx {
             // Already trimmed
             return Ok(());
         }
-        
+
         let mut batch = WriteBatch::default();
-        
+
         // Delete all entries from compacted_idx to idx
         for i in compacted_idx..idx {
             let key = format!("{}{}", KEY_LOG_PREFIX, i);
             batch.delete(key);
         }
-        
+
         // Update the compacted index
         let encoded = bincode::serialize(&idx)
             .map_err(|e| Box::new(std::io::Error::new(
@@ -468,13 +468,13 @@ impl Storage<ReplicatedCommit> for DistributedCommitStorage {
                 format!("Failed to serialize compacted index: {}", e),
             )))?;
         batch.put(KEY_COMPACTED_IDX, encoded);
-        
+
         self.db.write(batch)
             .map_err(|e| Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Failed to write batch to RocksDB: {}", e),
             )))?;
-            
+
         Ok(())
     }
 
@@ -558,7 +558,7 @@ impl DistributedCommitStorage {
 
         // Initialize metadata keys if they don't exist
         let mut batch = WriteBatch::default();
-        
+
         // Initialize decided index
         if db.get(KEY_DECIDED_IDX).map_err(|e| KhonsuError::StorageError(e.to_string()))?.is_none() {
             batch.put(
@@ -566,7 +566,7 @@ impl DistributedCommitStorage {
                 bincode::serialize(&0usize).map_err(|e| KhonsuError::SerializationError(e.to_string()))?,
             );
         }
-        
+
         // Initialize compacted index
         if db.get(KEY_COMPACTED_IDX).map_err(|e| KhonsuError::StorageError(e.to_string()))?.is_none() {
             batch.put(
@@ -574,7 +574,7 @@ impl DistributedCommitStorage {
                 bincode::serialize(&0usize).map_err(|e| KhonsuError::SerializationError(e.to_string()))?,
             );
         }
-        
+
         // Initialize last log index
         if db.get("last_log_index").map_err(|e| KhonsuError::StorageError(e.to_string()))?.is_none() {
             batch.put(
@@ -599,15 +599,6 @@ impl DistributedCommitStorage {
         }
     }
 
-    // Helper to set a metadata value
-    fn set_metadata<T: Serialize>(&mut self, key: &str, value: &T) -> Result<()> {
-        let encoded: Vec<u8> = bincode::serialize(value)
-            .map_err(|e| KhonsuError::SerializationError(e.to_string()))?;
-        self.db.put(key, encoded)
-            .map_err(|e| KhonsuError::StorageError(e.to_string()))?;
-        Ok(())
-    }
-
     // Helper to get a log entry from RocksDB
     fn get_log_entry(&self, idx: usize) -> Result<Option<ReplicatedCommit>> {
         let key = format!("{}{}", KEY_LOG_PREFIX, idx);
@@ -619,18 +610,18 @@ impl DistributedCommitStorage {
             None => Ok(None),
         }
     }
-    
+
     // Helper to recover transaction state
     pub fn recover_transaction_state(&self, txn_id: &crate::distributed::GlobalTransactionId) -> Result<Option<crate::distributed::TransactionState>> {
         // Scan the log for the transaction
         let compacted_idx = self.get_metadata::<usize>(KEY_COMPACTED_IDX)
             .map_err(|e| KhonsuError::StorageError(format!("Failed to get compacted index: {}", e)))?
             .unwrap_or(0);
-            
+
         let last_idx = self.get_metadata::<usize>("last_log_index")
             .map_err(|e| KhonsuError::StorageError(format!("Failed to get last log index: {}", e)))?
             .unwrap_or(0);
-            
+
         for idx in compacted_idx..=last_idx {
             if let Some(entry) = self.get_log_entry(idx)? {
                 if entry.transaction_id == *txn_id {
@@ -638,7 +629,7 @@ impl DistributedCommitStorage {
                 }
             }
         }
-        
+
         Ok(None)
     }
 }
