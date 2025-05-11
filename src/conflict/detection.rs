@@ -1,6 +1,6 @@
+use crate::TransactionIsolation;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::errors::*;
-use crate::TransactionIsolation;
 use ahash::AHashMap as HashMap;
 use arrow::record_batch::RecordBatch;
 use log::debug;
@@ -123,7 +123,13 @@ pub fn detect_conflicts(
                 if let Some(current_value) = txn_buffer.get(key) {
                     // Conflict if another transaction committed a change after this one started.
                     if current_value.version() > committing_tx_id {
-                        debug!("Conflict Detail: Committed WW (RC) on '{}' (Tx {} start {}, Buffer ver {})", key, committing_tx_id, committing_tx_id, current_value.version());
+                        debug!(
+                            "Conflict Detail: Committed WW (RC) on '{}' (Tx {} start {}, Buffer ver {})",
+                            key,
+                            committing_tx_id,
+                            committing_tx_id,
+                            current_value.version()
+                        );
                         conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 }
@@ -136,13 +142,22 @@ pub fn detect_conflicts(
             for (key, read_version) in read_set {
                 if let Some(current_value) = txn_buffer.get(key) {
                     if current_value.version() > *read_version {
-                        debug!("Conflict Detail: Committed RW on '{}' (Tx {} read ver {}, Buffer ver {})", key, committing_tx_id, read_version, current_value.version());
+                        debug!(
+                            "Conflict Detail: Committed RW on '{}' (Tx {} read ver {}, Buffer ver {})",
+                            key,
+                            committing_tx_id,
+                            read_version,
+                            current_value.version()
+                        );
                         conflicts.insert(key.clone(), ConflictType::CommittedReadWrite);
                     }
                 } else {
                     // Heuristic: Assume conflict if deleted after read (requires read_version > 0)
                     if *read_version > 0 {
-                        debug!("Conflict Detail: Committed RD on '{}' (Tx {} read ver {}, Buffer deleted)", key, committing_tx_id, read_version);
+                        debug!(
+                            "Conflict Detail: Committed RD on '{}' (Tx {} read ver {}, Buffer deleted)",
+                            key, committing_tx_id, read_version
+                        );
                         conflicts.insert(key.clone(), ConflictType::CommittedReadDelete);
                     }
                 }
@@ -154,7 +169,13 @@ pub fn detect_conflicts(
                     // Check for WW conflict based on read version (if read) or start time (if not read)
                     let baseline_version = read_set.get(key).copied().unwrap_or(committing_tx_id);
                     if current_value.version() > baseline_version {
-                        debug!("Conflict Detail: Committed WW (RR) on '{}' (Tx {} baseline ver {}, Buffer ver {})", key, committing_tx_id, baseline_version, current_value.version());
+                        debug!(
+                            "Conflict Detail: Committed WW (RR) on '{}' (Tx {} baseline ver {}, Buffer ver {})",
+                            key,
+                            committing_tx_id,
+                            baseline_version,
+                            current_value.version()
+                        );
                         conflicts.insert(key.clone(), ConflictType::CommittedWriteWrite);
                     }
                 } else {

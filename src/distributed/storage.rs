@@ -1,8 +1,10 @@
+//! Persistent storage implementation for the commit log
+
 use crate::errors::*;
 use bincode;
 use omnipaxos::ballot_leader_election::Ballot;
 use omnipaxos::storage::{StopSign, Storage, StorageOp, StorageResult};
-use rocksdb::{Options, WriteBatch, DB};
+use rocksdb::{DB, Options, WriteBatch};
 use serde::Deserialize;
 use std::path::Path;
 

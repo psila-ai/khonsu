@@ -1,3 +1,5 @@
+//! Extensions for communication channels with node identification
+
 use crossbeam_channel as channel;
 use omnipaxos::util::NodeId;
 

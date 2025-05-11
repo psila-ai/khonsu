@@ -26,3 +26,6 @@ stest:
 # Below is for distributed tests with the distributed feature enabled.
 dtest:
 	cargo test --features distributed -- --test-threads=1
+
+doc:
+	RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --no-deps --all-features

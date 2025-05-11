@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arrow::record_batch::RecordBatch;
-use khonsu::data_store::versioned_value::VersionedValue;
 use khonsu::Khonsu;
+use khonsu::data_store::versioned_value::VersionedValue;
 
 /// Helper function to manually replicate data between nodes for testing.
 ///

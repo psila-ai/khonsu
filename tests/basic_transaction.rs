@@ -13,7 +13,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
 // Use khonsu:: prefix for library items
-use khonsu::{errors::KhonsuError, TransactionIsolation};
+use khonsu::{TransactionIsolation, errors::KhonsuError};
 // Use common:: prefix for shared test utilities
 
 // Configure tests to run single-threaded
@@ -110,10 +110,12 @@ mod single_threaded_tests {
 
         // Verify data is present by reading
         let mut verify_txn_before = khonsu.start_transaction();
-        assert!(verify_txn_before
-            .read(&"key1".to_string())
-            .unwrap()
-            .is_some());
+        assert!(
+            verify_txn_before
+                .read(&"key1".to_string())
+                .unwrap()
+                .is_some()
+        );
         verify_txn_before.rollback(); // Don't need to commit read
 
         // Start a new transaction, delete data, and commit
@@ -167,10 +169,12 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial
-            .read(&"key1".to_string())
-            .unwrap()
-            .is_some());
+        assert!(
+            verify_txn_initial
+                .read(&"key1".to_string())
+                .unwrap()
+                .is_some()
+        );
         verify_txn_initial.rollback();
 
         // Scenario: W-R-W conflict (Adjusted for SSI)
@@ -257,10 +261,12 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial
-            .read(&"key1".to_string())
-            .unwrap()
-            .is_some());
+        assert!(
+            verify_txn_initial
+                .read(&"key1".to_string())
+                .unwrap()
+                .is_some()
+        );
         verify_txn_initial.rollback();
 
         // Scenario: R-W conflict (Adjusted for SSI)
@@ -337,10 +343,12 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial
-            .read(&"key1".to_string())
-            .unwrap()
-            .is_some());
+        assert!(
+            verify_txn_initial
+                .read(&"key1".to_string())
+                .unwrap()
+                .is_some()
+        );
         verify_txn_initial.rollback();
 
         // Scenario: W-W conflict
@@ -421,10 +429,12 @@ mod single_threaded_tests {
 
         // Verify initial data is present by reading
         let mut verify_txn_initial = khonsu.start_transaction();
-        assert!(verify_txn_initial
-            .read(&"key1".to_string())
-            .unwrap()
-            .is_some());
+        assert!(
+            verify_txn_initial
+                .read(&"key1".to_string())
+                .unwrap()
+                .is_some()
+        );
         verify_txn_initial.rollback();
 
         // Start Tx1 (will commit) and Tx2 (will abort)

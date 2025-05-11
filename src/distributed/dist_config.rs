@@ -1,5 +1,7 @@
-use omnipaxos::util::NodeId;
+//! Configuration structures for distributed operation
+
 use omnipaxos::ClusterConfig;
+use omnipaxos::util::NodeId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;

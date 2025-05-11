@@ -9,10 +9,10 @@ use arrow::array::{Int64Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use khonsu::{
+    Khonsu, TransactionIsolation,
     conflict::resolution::ConflictResolution,
     errors::Result,
     storage::{Storage, StorageMutation},
-    Khonsu, TransactionIsolation,
 };
 use std::sync::{Arc, Mutex};
 
@@ -83,8 +83,8 @@ pub fn setup_khonsu(isolation: TransactionIsolation) -> Arc<Khonsu> {
     #[cfg(feature = "distributed")]
     {
         use khonsu::distributed::dist_config::KhonsuDistConfig;
-        use omnipaxos::util::NodeId;
         use omnipaxos::ClusterConfig;
+        use omnipaxos::util::NodeId;
         use std::collections::HashMap;
         use std::path::PathBuf;
         use tempfile::TempDir;

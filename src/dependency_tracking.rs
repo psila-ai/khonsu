@@ -459,8 +459,15 @@ impl DependencyTracker {
                 if current_value.version() > *read_version {
                     let writer_commit_ts = current_value.version();
                     if writer_commit_ts > start_ts {
-                        debug!("SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
-                                   committing_tx_id, key, read_version, writer_commit_ts, writer_commit_ts, writer_commit_ts);
+                        debug!(
+                            "SSI Backward Validation Failed (RW): Tx {} read key '{}' at ver {}, but Tx {} committed ver {} at TS {}",
+                            committing_tx_id,
+                            key,
+                            read_version,
+                            writer_commit_ts,
+                            writer_commit_ts,
+                            writer_commit_ts
+                        );
                         return Ok(false);
                     }
                 }
@@ -468,8 +475,10 @@ impl DependencyTracker {
                 // Item we read was deleted. Conflict if deletion committed after we started.
                 if *read_version > 0 {
                     // Heuristic: If we read version > 0, it existed
-                    debug!("SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
-                              committing_tx_id, key, read_version);
+                    debug!(
+                        "SSI Backward Validation Failed (RD Heuristic): Tx {} read key '{}' at ver {}, but it was deleted.",
+                        committing_tx_id, key, read_version
+                    );
                     return Ok(false);
                 }
             }
@@ -484,10 +493,12 @@ impl DependencyTracker {
                     "  SSI WW Check: Key='{}', CommittingTx={}, StartTs={}, BufferVersion={}",
                     key, committing_tx_id, start_ts, writer_commit_ts
                 ); // ADDED LOG
-                   // Conflict if writer committed after we started.
+                // Conflict if writer committed after we started.
                 if writer_commit_ts > start_ts {
-                    debug!("  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
-                               committing_tx_id, key, writer_commit_ts, writer_commit_ts, writer_commit_ts);
+                    debug!(
+                        "  SSI Backward Validation Failed (WW): Tx {} writing key '{}', but Tx {} committed ver {} at TS {}",
+                        committing_tx_id, key, writer_commit_ts, writer_commit_ts, writer_commit_ts
+                    );
                     return Ok(false);
                 }
             }
@@ -510,7 +521,10 @@ impl DependencyTracker {
                             .get(reader_id)
                             .is_some_and(|info| info.state == TxnState::Active)
                     {
-                        debug!("SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'", committing_tx_id, reader_id, write_key);
+                        debug!(
+                            "SSI Forward Validation: Found outgoing RW edge from Tx {} to active Tx {} on key '{}'",
+                            committing_tx_id, reader_id, write_key
+                        );
                         has_outgoing_rw_edge = true;
                         if has_incoming_rw_edge {
                             break;
@@ -536,7 +550,10 @@ impl DependencyTracker {
                                 .get(writer_id)
                                 .is_some_and(|info| info.state == TxnState::Active)
                         {
-                            debug!("SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'", writer_id, committing_tx_id, read_key);
+                            debug!(
+                                "SSI Forward Validation: Found incoming RW edge from active Tx {} to Tx {} on key '{}'",
+                                writer_id, committing_tx_id, read_key
+                            );
                             has_incoming_rw_edge = true;
                             if has_outgoing_rw_edge {
                                 break;
@@ -556,7 +573,10 @@ impl DependencyTracker {
                     {
                         if let Some(ref committed_write_set) = other_info.write_set_keys {
                             if committed_write_set.contains(read_key) {
-                                debug!("SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'", other_txn_id, committing_tx_id, read_key);
+                                debug!(
+                                    "SSI Forward Validation: Found incoming RW edge from committed Tx {} to Tx {} on key '{}'",
+                                    other_txn_id, committing_tx_id, read_key
+                                );
                                 has_incoming_rw_edge = true;
                                 if has_outgoing_rw_edge {
                                     break;

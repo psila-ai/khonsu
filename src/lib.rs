@@ -1,4 +1,5 @@
 #![doc(html_logo_url = "https://github.com/Jet-Engine/khonsu/raw/master/art/khonsu.jpg")]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 //! **Khonsu: A Software Transactional Memory (STM) Library in Rust**
 //!
@@ -50,7 +51,7 @@
 //!
 //! ## Example Usage
 //!
-//! ```no_run,ignore
+//! ```no_run
 //! use khonsu::prelude::*;
 //! use std::sync::Arc;
 //! use arrow::record_batch::RecordBatch;
@@ -76,7 +77,10 @@
 //! let storage = Arc::new(MockStorage::default());
 //! let isolation = TransactionIsolation::Serializable;
 //! let resolution = ConflictResolution::Fail;
+//! # #[cfg(not(feature = "distributed"))]
 //! let khonsu = Khonsu::new(storage, isolation, resolution);
+//! # #[cfg(feature = "distributed")]
+//! let khonsu = Khonsu::new(storage.clone(), isolation, resolution, None);
 //!
 //! // Start a transaction
 //! let mut transaction = khonsu.start_transaction();

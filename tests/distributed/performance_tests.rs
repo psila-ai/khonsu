@@ -1,7 +1,7 @@
 #![cfg(feature = "distributed")]
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -125,8 +125,10 @@ fn test_multi_node_write_throughput() {
     let successful_operations = success_count.load(Ordering::SeqCst);
     let success_rate = (successful_operations as f64 / total_operations as f64) * 100.0;
 
-    println!("Multi-node parallel write throughput: {:.2} ops/sec ({}/{} operations in {:.2?}, success rate: {:.2}%)",
-             throughput, successful_operations, total_operations, elapsed, success_rate);
+    println!(
+        "Multi-node parallel write throughput: {:.2} ops/sec ({}/{} operations in {:.2?}, success rate: {:.2}%)",
+        throughput, successful_operations, total_operations, elapsed, success_rate
+    );
 
     // Ensure throughput is reasonable and success rate is high
     assert!(

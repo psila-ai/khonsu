@@ -60,13 +60,13 @@
 //! ).expect("Failed to create DistributedCommitManager");
 //! ```
 
-use crossbeam_channel::{bounded, Receiver, Sender};
-use omnipaxos::{messages::Message, util::NodeId, ClusterConfig, OmniPaxosConfig, ServerConfig};
+use crossbeam_channel::{Receiver, Sender, bounded};
+use omnipaxos::{ClusterConfig, OmniPaxosConfig, ServerConfig, messages::Message, util::NodeId};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
-use std::thread::{self, sleep, JoinHandle};
+use std::thread::{self, JoinHandle, sleep};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Runtime;
 
@@ -74,12 +74,12 @@ use crate::data_store::txn_buffer::TxnBuffer;
 use crate::data_store::versioned_value::VersionedValue;
 use crate::dependency_tracking::DependencyTracker;
 use crate::distributed::{
+    GlobalTransactionId, ReplicatedCommit, SerializableVersionedValue, TransactionState,
     channel_ext::NodeSender,
     grpc_server::start_grpc_server,
     network::KhonsuNetwork,
     storage::DistributedCommitStorage,
     twopc::{ParticipantState, TwoPhaseCommitManager},
-    GlobalTransactionId, ReplicatedCommit, SerializableVersionedValue, TransactionState,
 };
 use crate::errors::KhonsuError;
 use crate::storage::{Storage, StorageMutation};

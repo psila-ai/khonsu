@@ -187,7 +187,7 @@ fn test_serializable_ww_conflict_interleaved() {
         println!("Tx1-WW ({}) attempting commit.", txn1_id);
         let commit_result = txn1.commit();
         println!("Tx1-WW ({:?}) commit result: {:?}", commit_result, txn1_id); // Ensure {:?} is used
-                                                                               // Assert Tx1 commit failed due to TransactionConflict
+        // Assert Tx1 commit failed due to TransactionConflict
         assert!(commit_result.is_err(), "Tx1-WW commit should have failed");
         match commit_result.err().unwrap() {
             KhonsuError::TransactionConflict => println!(

@@ -1,4 +1,4 @@
-//! Two-Phase Commit (2PC) protocol implementation over OmniPaxos.
+//! Two-Phase Commit (2PC) protocol implementation over Multi Paxos.
 //!
 //! This module implements a distributed transaction commit protocol using OmniPaxos
 //! as the consensus mechanism. The protocol ensures that all nodes in the cluster

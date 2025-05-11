@@ -1,12 +1,12 @@
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::TransactionIsolation;
 use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::dependency_tracking::DependencyTracker;
 use crate::storage::Storage;
 use crate::transaction::Transaction;
-use crate::TransactionIsolation;
 
 #[cfg(feature = "distributed")]
 use crate::prelude::dist_config::KhonsuDistConfig;

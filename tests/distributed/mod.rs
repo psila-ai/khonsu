@@ -9,8 +9,8 @@ use arrow::array::Int32Array;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use khonsu::prelude::*;
-use omnipaxos::util::NodeId;
 use omnipaxos::ClusterConfig;
+use omnipaxos::util::NodeId;
 use tempfile::TempDir;
 
 // Import KhonsuDistConfig directly from the distributed module

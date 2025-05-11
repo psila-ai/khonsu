@@ -1,7 +1,7 @@
 #![cfg(feature = "distributed")]
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -519,7 +519,9 @@ fn test_write_skew_prevention() {
     // In our current implementation, both transactions might succeed
     // This is a known limitation
     if t1_result.is_ok() && t2_result.is_ok() {
-        println!("Note: Both transactions succeeded, which is a limitation of our current implementation");
+        println!(
+            "Note: Both transactions succeeded, which is a limitation of our current implementation"
+        );
         println!("Checking final state for consistency...");
     }
 

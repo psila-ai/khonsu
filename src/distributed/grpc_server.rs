@@ -1,3 +1,5 @@
+//! gRPC server implementation for inter-node communication
+
 use bincode;
 use crossbeam_channel::Sender;
 use omnipaxos::messages::Message;
@@ -5,12 +7,12 @@ use omnipaxos::util::NodeId;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
-use crate::distributed::paxos_service::paxos_service_server::{PaxosService, PaxosServiceServer};
+use crate::distributed::ReplicatedCommit;
 use crate::distributed::paxos_service::ConsensusMessage;
 use crate::distributed::paxos_service::SendMessageResponse;
-use crate::distributed::ReplicatedCommit;
+use crate::distributed::paxos_service::paxos_service_server::{PaxosService, PaxosServiceServer};
 
 pub struct KhonsuOmniPaxosService {
     // Sender channel to the OmniPaxos event loop thread.

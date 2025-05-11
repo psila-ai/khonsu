@@ -1,14 +1,15 @@
 use ahash::{AHashMap as HashMap, AHashSet as HashSet}; // Keep HashSet import
 use arrow::record_batch::RecordBatch;
 use log::debug;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(feature = "distributed")]
 use crate::distributed::channel_ext::SenderExt;
 #[cfg(feature = "distributed")]
 use crossbeam_channel as channel; // Use crossbeam for channels
 
+use crate::TransactionIsolation;
 use crate::conflict::detection::detect_conflicts;
 use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
@@ -16,7 +17,6 @@ use crate::data_store::versioned_value::VersionedValue;
 use crate::dependency_tracking::{DataItem, DependencyTracker}; // Keep DependencyTracker
 use crate::errors::{KhonsuError, Result};
 use crate::storage::*;
-use crate::TransactionIsolation;
 
 #[cfg(feature = "distributed")]
 /// Represents the outcome of a distributed transaction commit.
@@ -353,13 +353,23 @@ impl Transaction {
                 }
                 ConflictResolution::Ignore => {
                     write_set_to_apply.retain(|key, _| !conflicts.contains_key(key));
-                    debug!("Conflict detected for transaction {}. Resolution: Ignore. Filtered {} conflicting changes.", self.id, conflicts.len());
+                    debug!(
+                        "Conflict detected for transaction {}. Resolution: Ignore. Filtered {} conflicting changes.",
+                        self.id,
+                        conflicts.len()
+                    );
                 }
                 ConflictResolution::Replace => {
-                    debug!("Conflict detected for transaction {}. Resolution: Replace. Conflicting changes will overwrite existing data.", self.id);
+                    debug!(
+                        "Conflict detected for transaction {}. Resolution: Replace. Conflicting changes will overwrite existing data.",
+                        self.id
+                    );
                 }
                 ConflictResolution::Append => {
-                    debug!("Conflict detected for transaction {}. Resolution: Append. Merging conflicting changes.", self.id);
+                    debug!(
+                        "Conflict detected for transaction {}. Resolution: Append. Merging conflicting changes.",
+                        self.id
+                    );
                     let mut merged_changes: HashMap<String, Option<RecordBatch>> = HashMap::new();
                     for (key, _conflict_type) in &conflicts {
                         if let Some(change) = write_set_to_apply.get(key) {
@@ -377,11 +387,17 @@ impl Transaction {
                                     merged_changes.insert(key.clone(), Some(new_data.clone()));
                                 }
                             } else {
-                                debug!("Conflict on deletion for key {}. Append resolution not applicable.", key);
+                                debug!(
+                                    "Conflict on deletion for key {}. Append resolution not applicable.",
+                                    key
+                                );
                                 merged_changes.insert(key.clone(), None);
                             }
                         } else {
-                            debug!("Conflict on read-only key {}. No Append resolution action needed on write set.", key);
+                            debug!(
+                                "Conflict on read-only key {}. No Append resolution action needed on write set.",
+                                key
+                            );
                         }
                     }
                     for (key, merged_change) in merged_changes {
@@ -400,7 +416,10 @@ impl Transaction {
                     receiver
                 } else {
                     // This should not happen in normal operation, but we'll handle it gracefully
-                    eprintln!("Warning: No decision receiver provided for transaction {}. Creating one now.", self.id);
+                    eprintln!(
+                        "Warning: No decision receiver provided for transaction {}. Creating one now.",
+                        self.id
+                    );
                     let node_id = distributed_manager_sender.node_id();
                     let (sender, receiver) = channel::bounded::<DistributedCommitOutcome>(1);
 
@@ -546,7 +565,10 @@ impl Transaction {
                         Err(KhonsuError::TransactionConflict) // Or a specific distributed abort error
                     }
                     Err(e) => {
-                        eprintln!("Error receiving DistributedCommitManager decision for transaction {}: {:?}", self.id, e);
+                        eprintln!(
+                            "Error receiving DistributedCommitManager decision for transaction {}: {:?}",
+                            self.id, e
+                        );
                         self.dependency_tracker.mark_aborted(self.id);
                         Err(KhonsuError::DistributedCommitError(format!(
                             "Failed to receive DistributedCommitManager decision: {:?}",
@@ -556,7 +578,10 @@ impl Transaction {
                 }
             } else {
                 // Distributed feature enabled but no DistributedCommitManager sender provided
-                eprintln!("Distributed feature enabled but no DistributedCommitManager sender provided for transaction {}.", self.id);
+                eprintln!(
+                    "Distributed feature enabled but no DistributedCommitManager sender provided for transaction {}.",
+                    self.id
+                );
                 self.dependency_tracker.mark_aborted(self.id);
                 Err(KhonsuError::DistributedCommitError(
                     "No DistributedCommitManager sender available".to_string(),

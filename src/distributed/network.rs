@@ -1,3 +1,5 @@
+//! Network communication layer for consensus messages
+
 use bincode;
 use crossbeam_channel as channel;
 use omnipaxos::messages::Message;
@@ -6,8 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
-use crate::distributed::paxos_service::ConsensusMessage;
 use crate::distributed::ReplicatedCommit;
+use crate::distributed::paxos_service::ConsensusMessage;
 
 /// Network implementation for OmniPaxos using gRPC.
 pub struct KhonsuNetwork {

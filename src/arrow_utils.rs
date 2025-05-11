@@ -266,7 +266,7 @@ fn append_value(
             return Err(KhonsuError::ArrowError(format!(
                 "Unsupported Arrow Data Type for appending: {:?}",
                 data_type
-            )))
+            )));
         }
     }
     Ok(())

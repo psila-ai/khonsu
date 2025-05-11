@@ -49,7 +49,7 @@ use crate::data_store::versioned_value::VersionedValue;
 use arrow::record_batch::RecordBatch;
 use omnipaxos::{macros::Entry, storage::Snapshot, util::NodeId};
 use serde::{Deserialize, Serialize};
-use std::collections::{hash_map::DefaultHasher, HashMap};
+use std::collections::{HashMap, hash_map::DefaultHasher};
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -350,6 +350,8 @@ impl Snapshot<ReplicatedCommit> for ReplicatedCommitSnapshot {
 }
 
 pub mod paxos_service {
+    //! Multi Paxos Service
+
     // Include the generated protobuf code here
     // The build script will generate this code.
     // We declare the module here so other parts of the distributed module can use it.
