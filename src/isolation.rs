@@ -7,15 +7,17 @@
 /// levels provide stronger guarantees about data consistency but can potentially reduce
 /// concurrency and performance.
 pub enum TransactionIsolation {
-    /// **Read Committed:**
-    ///
-    /// This isolation level guarantees that any data read is committed at the moment it is read.
-    /// However, if the same transaction reads the same data item multiple times, it may see
-    /// different values if another transaction modifies and commits that data item between the reads.
-    /// This level prevents dirty reads but allows non-repeatable reads and phantom reads.
-    ///
-    /// With `ReadCommitted`, values are always read directly from the in-memory cache (`TxnBuffer`)
-    /// each time they are accessed within a transaction.
+/// **Read Committed:**
+///
+/// This isolation level guarantees that any data read is committed at the moment it is read.
+/// However, if the same transaction reads the same data item multiple times, it may see
+/// different values if another transaction modifies and commits that data item between the reads.
+/// This level prevents dirty reads but allows non-repeatable reads and phantom reads.
+///
+/// With `ReadCommitted`, values are always read directly from the in-memory cache (`TxnBuffer`)
+/// each time they are accessed within a transaction.
+///
+/// In distributed mode, Read Committed isolation is fully supported and works correctly across nodes.
     ReadCommitted,
     /// **Repeatable Read:**
     ///
@@ -29,6 +31,10 @@ pub enum TransactionIsolation {
     /// version is recorded in the transaction's read set. Subsequent reads of the same item
     /// within that transaction will return the value from the transaction's private view
     /// or staged changes, ensuring repeatable reads.
+    ///
+    /// In distributed mode, Repeatable Read has limitations as the local transaction's read set
+    /// may not be properly synchronized across nodes, potentially leading to inconsistent reads
+    /// in some scenarios.
     RepeatableRead,
     /// **Serializable:**
     ///
@@ -41,5 +47,11 @@ pub enum TransactionIsolation {
     /// of the data. However, during the commit process, SSI validation checks are performed
     /// using a dependency tracker to detect serialization anomalies. If a transaction
     /// cannot be serialized with respect to other concurrent transactions, it will be aborted.
+    ///
+    /// In distributed mode, Serializable isolation has significant limitations. The current
+    /// implementation lacks global dependency tracking across nodes, synchronized timestamps,
+    /// and cross-node validation protocols. This can lead to serialization anomalies such as
+    /// write skew in distributed settings. For truly serializable isolation in distributed
+    /// environments, additional mechanisms would be needed.
     Serializable,
 }

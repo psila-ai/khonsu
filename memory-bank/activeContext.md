@@ -40,25 +40,32 @@ The focus has been on implementing the distributed commit functionality using `o
    - Add more comprehensive recovery tests for various failure scenarios
    - Implement automatic recovery of in-progress transactions after node restart
 
-2. **Optimize Performance:**
+2. **Improve Distributed Serializable Isolation:**
+   - Implement global dependency tracking across nodes for true serializable isolation
+   - Add timestamp synchronization or vector clocks for consistent ordering
+   - Enhance validation protocols to check for conflicts across all nodes
+   - Update documentation to clarify which isolation levels are fully supported in distributed mode
+   - Add examples specific to distributed operation with appropriate isolation levels
+
+3. **Optimize Performance:**
    - Profile and optimize the distributed commit path
    - Reduce serialization overhead for large RecordBatches
    - Implement batching for network communication
 
-3. **Add Monitoring and Metrics:**
+4. **Add Monitoring and Metrics:**
    - Add metrics for transaction throughput, latency, and success/failure rates
    - Implement monitoring for node health and cluster status
 
-4. **Improve Distributed Transaction Routing:**
+5. **Improve Distributed Transaction Routing:**
    - Implement smarter routing of transactions to nodes based on data locality
    - Add support for read-only transactions that don't need consensus
 
-5. **Refine SSI Implementation:**
+6. **Refine SSI Implementation:**
    - Improve backward validation for deleted items (currently heuristic)
    - Optimize SSI validation performance
    - Refine garbage collection strategy and memory usage for `DependencyTracker`
 
-6. **Comprehensive Testing:**
+7. **Comprehensive Testing:**
    - Add more targeted tests for various SSI conflict scenarios
    - Add tests for network partitions and other failure modes
    - Implement stress testing for the distributed system

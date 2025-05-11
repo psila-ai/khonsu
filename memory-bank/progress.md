@@ -79,6 +79,10 @@ The project has successfully implemented distributed commits using OmniPaxos for
 - The use of gRPC necessitates the use of an asynchronous runtime (e.g., Tokio) within the `distributed` module. This is a necessary exception to the general "No Async Runtime" constraint for the core STM logic.
 - Serialization overhead for large RecordBatches might impact performance in distributed scenarios.
 - Recovery from certain complex failure scenarios (e.g., network partitions during commit) might not be fully tested.
+- **Isolation Level Limitations in Distributed Mode:**
+  - Only Read Committed isolation is fully supported in distributed mode
+  - Repeatable Read has limitations as the local transaction's read set may not be properly synchronized across nodes
+  - Serializable isolation has significant limitations in distributed settings due to the lack of global dependency tracking, synchronized timestamps, and cross-node validation protocols
 
 ## Evolution of Project Decisions
 

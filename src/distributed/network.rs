@@ -10,7 +10,6 @@ use crate::distributed::paxos_service::ConsensusMessage;
 use crate::distributed::ReplicatedCommit;
 
 /// Network implementation for OmniPaxos using gRPC.
-#[cfg(feature = "distributed")]
 pub struct KhonsuNetwork {
     // Receiver for messages from the local gRPC server (messages from other nodes).
     receiver: channel::Receiver<Message<ReplicatedCommit>>,
@@ -24,7 +23,6 @@ pub struct KhonsuNetwork {
     peer_addrs: HashMap<NodeId, String>,
 }
 
-#[cfg(feature = "distributed")]
 impl KhonsuNetwork {
     /// Creates a new `KhonsuNetwork` with gRPC clients for peers and a receiver for incoming messages.
     ///

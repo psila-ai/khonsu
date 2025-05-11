@@ -24,6 +24,8 @@
 //! - **Configurable Isolation Levels:** Support Read Committed, Repeatable Read, and Serializable isolation.
 //! - **Serializable Snapshot Isolation (SSI):** Implementation of SSI for the Serializable isolation level.
 //! - **Distributed Extensible Design:** Designed with support for distributed commit in mind.
+//!   - In distributed mode, Read Committed isolation is fully supported
+//!   - Repeatable Read and Serializable isolation have limitations in distributed settings
 //!
 //! ## Architecture Overview
 //!
