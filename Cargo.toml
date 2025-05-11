@@ -37,4 +37,4 @@ tonic-build = "0.13"
 prost-build = "0.13"
 
 [package.metadata."docs.rs"]
-all-features = false
+all-features = true

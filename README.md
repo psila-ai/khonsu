@@ -141,9 +141,7 @@ Below you can find the research papers and various serializable checking mechani
 
 - Refine the SSI implementation, including improved handling of deletions and performance optimizations.
 - Implement comprehensive SSI test cases.
-- Complete the `TwoPhaseCommitParticipant` trait implementation for distributed commit.
 - Refine memory reclamation strategies.
-- Implement the full distributed commit protocol.
 - Address any remaining `TODO` comments in the codebase.
 
 ## License

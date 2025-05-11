@@ -3,13 +3,13 @@ use omnipaxos::util::NodeId;
 
 use crate::distributed::ReplicatedCommit;
 
-/// Extension trait for channel::Sender<ReplicatedCommit> to add node_id method.
+/// Extension trait for `channel::Sender<ReplicatedCommit>` to add node_id method.
 pub trait SenderExt {
     /// Returns the node ID associated with this sender.
     fn node_id(&self) -> NodeId;
 }
 
-/// A wrapper around channel::Sender<ReplicatedCommit> that includes the node ID.
+/// A wrapper around `channel::Sender<ReplicatedCommit>` that includes the node ID.
 pub struct NodeSender {
     /// The underlying sender.
     pub sender: channel::Sender<ReplicatedCommit>,

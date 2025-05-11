@@ -23,7 +23,7 @@
 //! - **Transaction Rollback:** Ensure atomicity with complete rollback on transaction abort.
 //! - **Configurable Isolation Levels:** Support Read Committed, Repeatable Read, and Serializable isolation.
 //! - **Serializable Snapshot Isolation (SSI):** Implementation of SSI for the Serializable isolation level.
-//! - **Extensible Design:** Designed with support for distributed commit in mind.
+//! - **Distributed Extensible Design:** Designed with support for distributed commit in mind.
 //!
 //! ## Architecture Overview
 //!
@@ -36,7 +36,6 @@
 //! - **DependencyTracker**: Tracks transaction dependencies for SSI validation.
 //! - **Conflict Detection and Resolution** modules: Handle identifying and resolving transaction conflicts.
 //! - [`Storage`]: A trait for interacting with durable storage.
-//! - [`TwoPhaseCommitParticipant`]: A trait for integrating with distributed commit protocols.
 //!
 //! ## Getting Started
 //!

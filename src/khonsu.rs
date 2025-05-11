@@ -281,8 +281,6 @@ impl Khonsu {
             None, // We'll create the receiver when needed
         )
     }
-
-    // TODO: Add methods for registering the TwoPhaseCommitParticipant trait if needed externally.
 }
 
 #[cfg(feature = "distributed")]
