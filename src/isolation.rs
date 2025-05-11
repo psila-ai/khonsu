@@ -7,17 +7,17 @@
 /// levels provide stronger guarantees about data consistency but can potentially reduce
 /// concurrency and performance.
 pub enum TransactionIsolation {
-/// **Read Committed:**
-///
-/// This isolation level guarantees that any data read is committed at the moment it is read.
-/// However, if the same transaction reads the same data item multiple times, it may see
-/// different values if another transaction modifies and commits that data item between the reads.
-/// This level prevents dirty reads but allows non-repeatable reads and phantom reads.
-///
-/// With `ReadCommitted`, values are always read directly from the in-memory cache (`TxnBuffer`)
-/// each time they are accessed within a transaction.
-///
-/// In distributed mode, Read Committed isolation is fully supported and works correctly across nodes.
+    /// **Read Committed:**
+    ///
+    /// This isolation level guarantees that any data read is committed at the moment it is read.
+    /// However, if the same transaction reads the same data item multiple times, it may see
+    /// different values if another transaction modifies and commits that data item between the reads.
+    /// This level prevents dirty reads but allows non-repeatable reads and phantom reads.
+    ///
+    /// With `ReadCommitted`, values are always read directly from the in-memory cache (`TxnBuffer`)
+    /// each time they are accessed within a transaction.
+    ///
+    /// In distributed mode, Read Committed isolation is fully supported and works correctly across nodes.
     ReadCommitted,
     /// **Repeatable Read:**
     ///

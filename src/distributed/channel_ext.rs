@@ -22,7 +22,7 @@ impl NodeSender {
     pub fn new(sender: channel::Sender<ReplicatedCommit>, node_id: NodeId) -> Self {
         Self { sender, node_id }
     }
-    
+
     /// Sends a message through the channel.
     pub fn send(&self, msg: ReplicatedCommit) -> Result<(), channel::SendError<ReplicatedCommit>> {
         self.sender.send(msg)

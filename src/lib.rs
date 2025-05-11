@@ -203,11 +203,11 @@ pub mod prelude {
     pub use crate::data_store::txn_buffer::*;
     pub use crate::data_store::versioned_value::*;
     pub use crate::dependency_tracking::*;
+    #[cfg(feature = "distributed")]
+    pub use crate::distributed::*;
     pub use crate::errors::*;
     pub use crate::isolation::*;
     pub use crate::khonsu::Khonsu;
     pub use crate::storage::*;
     pub use crate::transaction::Transaction;
-    #[cfg(feature = "distributed")]
-    pub use crate::distributed::*;
 }

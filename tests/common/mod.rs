@@ -70,7 +70,7 @@ impl Storage for MockStorage {
 /// a default mock storage and allowing specification of the transaction isolation level.
 pub fn setup_khonsu(isolation: TransactionIsolation) -> Arc<Khonsu> {
     let storage = Arc::new(MockStorage::new()); // Wrap MockStorage in Arc for dyn Storage
-    
+
     #[cfg(not(feature = "distributed"))]
     {
         Arc::new(Khonsu::new(
@@ -79,20 +79,20 @@ pub fn setup_khonsu(isolation: TransactionIsolation) -> Arc<Khonsu> {
             ConflictResolution::Fail, // Default conflict resolution
         ))
     }
-    
+
     #[cfg(feature = "distributed")]
     {
-        use std::path::PathBuf;
-        use std::collections::HashMap;
+        use khonsu::distributed::dist_config::KhonsuDistConfig;
         use omnipaxos::util::NodeId;
         use omnipaxos::ClusterConfig;
-        use khonsu::distributed::dist_config::KhonsuDistConfig;
+        use std::collections::HashMap;
+        use std::path::PathBuf;
         use tempfile::TempDir;
-        
+
         // Create a temporary directory for RocksDB storage
         let temp_dir = TempDir::new().unwrap();
         let storage_path = temp_dir.path().to_path_buf();
-        
+
         // Create a single-node cluster config for testing
         let node_id = 1;
         let cluster_config = ClusterConfig {
@@ -100,10 +100,10 @@ pub fn setup_khonsu(isolation: TransactionIsolation) -> Arc<Khonsu> {
             nodes: vec![node_id],
             flexible_quorum: None,
         };
-        
+
         // Create an empty peer_addrs map (no peers for single-node)
         let peer_addrs = HashMap::new();
-        
+
         // Create distributed config
         let dist_config = KhonsuDistConfig {
             node_id,
@@ -111,7 +111,7 @@ pub fn setup_khonsu(isolation: TransactionIsolation) -> Arc<Khonsu> {
             peer_addrs,
             storage_path,
         };
-        
+
         Arc::new(Khonsu::new(
             storage,
             isolation,

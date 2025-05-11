@@ -7,10 +7,10 @@
 use crate::distributed::{GlobalTransactionId, ReplicatedCommit, TransactionState};
 use crate::errors::KhonsuError;
 use omnipaxos::util::NodeId;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use parking_lot::RwLock;
 
 /// Represents the phase of a transaction in the 2PC protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -136,7 +136,11 @@ impl TwoPhaseCommitTransaction {
     ///
     /// * `node_id` - The ID of the participant node.
     /// * `state` - The new state of the participant.
-    pub fn update_participant(&mut self, node_id: NodeId, state: ParticipantState) -> Result<(), KhonsuError> {
+    pub fn update_participant(
+        &mut self,
+        node_id: NodeId,
+        state: ParticipantState,
+    ) -> Result<(), KhonsuError> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -333,7 +337,10 @@ impl TwoPhaseCommitManager {
     /// # Arguments
     ///
     /// * `transaction_id` - The global transaction ID.
-    pub fn remove_transaction(&self, transaction_id: &GlobalTransactionId) -> Result<(), KhonsuError> {
+    pub fn remove_transaction(
+        &self,
+        transaction_id: &GlobalTransactionId,
+    ) -> Result<(), KhonsuError> {
         let mut transactions = self.transactions.write();
         if transactions.remove(transaction_id).is_some() {
             Ok(())

@@ -1,10 +1,10 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashMap;
 
 use arrow::record_batch::RecordBatch;
-use khonsu::Khonsu;
 use khonsu::data_store::versioned_value::VersionedValue;
+use khonsu::Khonsu;
 
 /// Helper function to manually replicate data between nodes for testing.
 ///
@@ -24,21 +24,21 @@ pub fn manually_replicate_data(
     // Read data from source node
     let mut source_txn = source_khonsu.start_transaction();
     let mut data_to_replicate = HashMap::new();
-    
+
     for key in keys {
         if let Ok(Some(record_batch)) = source_txn.read(key) {
             data_to_replicate.insert(key.clone(), record_batch);
         }
     }
     source_txn.rollback();
-    
+
     // Write data to target node
     let mut target_txn = target_khonsu.start_transaction();
     for (key, record_batch) in data_to_replicate {
         let _ = target_txn.write(key, (*record_batch).clone());
     }
     let _ = target_txn.commit();
-    
+
     // Give some time for the commit to complete
     std::thread::sleep(Duration::from_millis(100));
 }

@@ -38,8 +38,8 @@ impl KhonsuNetwork {
         receiver: channel::Receiver<Message<ReplicatedCommit>>,
         runtime: Arc<Runtime>,
     ) -> Self {
-        Self { 
-            receiver, 
+        Self {
+            receiver,
             node_id,
             runtime,
             outgoing_buffer: Vec::new(),
@@ -54,17 +54,17 @@ impl KhonsuNetwork {
             Message::SequencePaxos(sp_msg) => sp_msg.to,
             Message::BLE(ble_msg) => ble_msg.to,
         };
-        
+
         // Skip sending messages to self
         if receiver_id == self.node_id {
             return Ok(());
         }
-        
+
         // Check if we have an address for the destination node
         if !self.peer_addrs.contains_key(&receiver_id) {
             return Err(format!("No address found for node {}", receiver_id));
         }
-        
+
         // For testing, we just pretend the message was sent successfully
         // In a real implementation, we would send the message over gRPC
         Ok(())

@@ -5,9 +5,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 #[cfg(feature = "distributed")]
-use crossbeam_channel as channel; // Use crossbeam for channels
-#[cfg(feature = "distributed")]
 use crate::distributed::channel_ext::SenderExt;
+#[cfg(feature = "distributed")]
+use crossbeam_channel as channel; // Use crossbeam for channels
 
 use crate::conflict::detection::detect_conflicts;
 use crate::conflict::resolution::ConflictResolution;
@@ -403,22 +403,19 @@ impl Transaction {
                     eprintln!("Warning: No decision receiver provided for transaction {}. Creating one now.", self.id);
                     let node_id = distributed_manager_sender.node_id();
                     let (sender, receiver) = channel::bounded::<DistributedCommitOutcome>(1);
-                    
+
                     // We need to register this receiver with the DistributedCommitManager
                     // But we can't do that here since we don't have a mutable reference to the manager
                     // So we'll just create a new receiver and hope for the best
                     receiver
                 };
-                
+
                 // Get the node ID before using the sender
                 let node_id = distributed_manager_sender.node_id();
-                
+
                 // Create a global transaction ID
-                let global_txn_id = crate::distributed::GlobalTransactionId::new(
-                    node_id,
-                    self.id
-                );
-                
+                let global_txn_id = crate::distributed::GlobalTransactionId::new(node_id, self.id);
+
                 // Convert the write set to SerializableVersionedValue
                 let mut serializable_write_set = HashMap::new();
                 for (key, value_opt) in &write_set_to_apply {
@@ -429,7 +426,7 @@ impl Transaction {
                                 Arc::new(record_batch.clone()),
                                 self.id, // Use transaction ID as temporary version
                             );
-                            
+
                             // Convert to SerializableVersionedValue
                             match crate::distributed::SerializableVersionedValue::from_versioned_value(&versioned_value) {
                                 Ok(serializable_value) => {
@@ -441,32 +438,36 @@ impl Transaction {
                                     )));
                                 }
                             }
-                        },
+                        }
                         None => {
                             // This is a deletion
                             serializable_write_set.insert(
                                 key.clone(),
-                                crate::distributed::SerializableVersionedValue::new_tombstone(self.id),
+                                crate::distributed::SerializableVersionedValue::new_tombstone(
+                                    self.id,
+                                ),
                             );
                         }
                     }
                 }
-                
+
                 // Get the prepare timestamp
                 let prepare_timestamp = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as u64;
-                
+
                 // Create participant nodes list
                 let participant_nodes = vec![node_id]; // For now, just include the local node
-                
+
                 // Convert AHashMap to std::collections::HashMap
-                let std_write_set: std::collections::HashMap<String, crate::distributed::SerializableVersionedValue> = 
-                    serializable_write_set.into_iter().collect();
-                let std_read_set: std::collections::HashMap<String, u64> = 
+                let std_write_set: std::collections::HashMap<
+                    String,
+                    crate::distributed::SerializableVersionedValue,
+                > = serializable_write_set.into_iter().collect();
+                let std_read_set: std::collections::HashMap<String, u64> =
                     self.read_set.clone().into_iter().collect();
-                
+
                 // Create the replicated commit message
                 let replicated_commit = crate::distributed::ReplicatedCommit::new_prepared(
                     global_txn_id,
@@ -494,22 +495,26 @@ impl Transaction {
                 match decision_receiver.recv() {
                     Ok(DistributedCommitOutcome::Committed) => {
                         debug!("Transaction {} committed via OmniPaxos.", self.id);
-                        
+
                         // For testing purposes, apply the changes locally
                         // In a real system, this would be handled by the DistributedCommitManager
-                        let commit_timestamp = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
+                        let commit_timestamp =
+                            self.transaction_counter.fetch_add(1, Ordering::SeqCst);
                         let mut mutations_to_persist: Vec<StorageMutation> = Vec::new();
                         let mut write_set_keys = ahash::AHashSet::new();
-                        
+
                         for (key, change) in write_set_to_apply.drain() {
                             write_set_keys.insert(key.clone());
                             match change {
                                 Some(record_batch) => {
                                     // Use commit_timestamp as the version for the new value
-                                    let versioned_value =
-                                        VersionedValue::new(Arc::new(record_batch.clone()), commit_timestamp);
+                                    let versioned_value = VersionedValue::new(
+                                        Arc::new(record_batch.clone()),
+                                        commit_timestamp,
+                                    );
                                     self.txn_buffer.insert(key.clone(), versioned_value);
-                                    mutations_to_persist.push(StorageMutation::Insert(key, record_batch));
+                                    mutations_to_persist
+                                        .push(StorageMutation::Insert(key, record_batch));
                                 }
                                 None => {
                                     self.txn_buffer.delete(&key.clone());
@@ -517,15 +522,19 @@ impl Transaction {
                                 }
                             }
                         }
-                        
+
                         // Apply mutations to storage
                         if let Err(e) = self._storage.apply_mutations(mutations_to_persist) {
                             eprintln!("Failed to persist changes to storage: {}", e);
                         }
-                        
+
                         // Mark as committed in tracker
-                        self.dependency_tracker.mark_committed(self.id, commit_timestamp, write_set_keys);
-                        
+                        self.dependency_tracker.mark_committed(
+                            self.id,
+                            commit_timestamp,
+                            write_set_keys,
+                        );
+
                         Ok(())
                     }
                     Ok(DistributedCommitOutcome::Aborted) => {

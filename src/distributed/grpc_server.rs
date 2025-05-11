@@ -7,9 +7,7 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::distributed::paxos_service::paxos_service_server::{
-    PaxosService, PaxosServiceServer,
-};
+use crate::distributed::paxos_service::paxos_service_server::{PaxosService, PaxosServiceServer};
 use crate::distributed::paxos_service::ConsensusMessage;
 use crate::distributed::paxos_service::SendMessageResponse;
 use crate::distributed::ReplicatedCommit;
@@ -25,9 +23,7 @@ impl KhonsuOmniPaxosService {
         omni_paxos_sender: Sender<Message<ReplicatedCommit>>,
         _node_id: NodeId, // Keep parameter but ignore it
     ) -> Self {
-        Self { 
-            omni_paxos_sender,
-        }
+        Self { omni_paxos_sender }
     }
 }
 
