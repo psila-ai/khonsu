@@ -16,6 +16,7 @@ The library addresses the challenge of ensuring data consistency and integrity i
 - Based on the configured isolation level and conflict resolution strategy, conflicts are handled appropriately.
 - Successful transactions are applied atomically, making their changes visible.
 - Failed transactions or explicit rollbacks discard staged changes.
+- **Persistence and Recovery:** Committed transactions and operations must be durably persisted to enable crash tolerance and Point-in-Time Recovery (PITR).
 
 ## User Experience Goals
 

@@ -163,6 +163,10 @@ pub mod data_store;
 /// Inter/Intra data dependency tracking
 pub mod dependency_tracking;
 ///
+/// 2PC Mechanism & Distributed Commit Integration
+#[cfg(feature = "distributed")]
+pub mod distributed;
+///
 /// Khonsu Errors
 pub mod errors;
 ///
@@ -177,10 +181,6 @@ pub mod storage;
 ///
 /// Base transaction system
 pub mod transaction;
-///
-/// 2PC Mechanism & Distributed Commit Integration
-#[cfg(feature = "distributed")]
-pub mod distributed;
 
 // Re-export key types and structs for easier access
 pub use conflict::detection::*;
@@ -202,11 +202,11 @@ pub mod prelude {
     pub use crate::data_store::txn_buffer::*;
     pub use crate::data_store::versioned_value::*;
     pub use crate::dependency_tracking::*;
+    #[cfg(feature = "distributed")]
+    pub use crate::distributed::*;
     pub use crate::errors::*;
     pub use crate::isolation::*;
     pub use crate::khonsu::Khonsu;
     pub use crate::storage::*;
     pub use crate::transaction::Transaction;
-    #[cfg(feature = "distributed")]
-    pub use crate::distributed::*;
 }

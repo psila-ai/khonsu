@@ -4,6 +4,11 @@ use log::debug;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+#[cfg(feature = "distributed")]
+use crossbeam_channel as channel; // Use crossbeam for channels
+#[cfg(feature = "distributed")]
+use omnipaxos::messages::Message;
+
 use crate::conflict::detection::detect_conflicts;
 use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
@@ -12,6 +17,14 @@ use crate::dependency_tracking::{DataItem, DependencyTracker}; // Keep Dependenc
 use crate::errors::{KhonsuError, Result};
 use crate::storage::{Storage, StorageMutation};
 use crate::TransactionIsolation;
+
+#[cfg(feature = "distributed")]
+/// Represents the outcome of a distributed transaction commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DistributedCommitOutcome {
+    Committed,
+    Aborted,
+}
 
 /// Represents a single transaction.
 ///
@@ -39,6 +52,13 @@ pub struct Transaction {
     conflict_resolution: ConflictResolution,
     /// Reference to the dependency tracker for serializability.
     dependency_tracker: Arc<DependencyTracker>,
+
+    #[cfg(feature = "distributed")]
+    /// Sender channel to the DistributedCommitManager for proposing commits.
+    distributed_manager_sender: Option<channel::Sender<crate::distributed::ReplicatedCommit>>,
+    #[cfg(feature = "distributed")]
+    /// Receiver channel for the DistributedCommitManager's decision on this transaction's commit.
+    decision_receiver: Option<channel::Receiver<DistributedCommitOutcome>>,
 }
 
 impl Transaction {
@@ -56,6 +76,8 @@ impl Transaction {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
+    /// use std::collections::HashMap;
+    /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
     /// # use ahash::AHashMap as HashMap;
@@ -98,7 +120,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
     /// let transaction = khonsu.start_transaction();
     /// let transaction_id = transaction.id();
     /// println!("Transaction ID: {}", transaction_id);
@@ -123,6 +145,8 @@ impl Transaction {
     /// * `storage` - An `Arc` to the `Storage` implementation.
     /// * `conflict_resolution` - The `ConflictResolution` strategy for this transaction.
     /// * `dependency_tracker` - An `Arc` to the shared `DependencyTracker`.
+    /// * `distributed_manager_sender` - Optional sender to the DistributedCommitManager (if distributed).
+    /// * `decision_receiver` - Optional receiver for the DistributedCommitManager's decision (if distributed).
     ///
     /// # Returns
     ///
@@ -135,6 +159,12 @@ impl Transaction {
         storage: Arc<dyn Storage>,
         conflict_resolution: ConflictResolution,
         dependency_tracker: Arc<DependencyTracker>,
+        #[cfg(feature = "distributed")] distributed_manager_sender: Option<
+            channel::Sender<crate::distributed::ReplicatedCommit>,
+        >,
+        #[cfg(feature = "distributed")] decision_receiver: Option<
+            channel::Receiver<DistributedCommitOutcome>,
+        >,
     ) -> Self {
         // Register the transaction with the tracker when it starts
         dependency_tracker.register_txn(id);
@@ -148,6 +178,10 @@ impl Transaction {
             write_set: HashMap::new(),
             conflict_resolution,
             dependency_tracker,
+            #[cfg(feature = "distributed")]
+            distributed_manager_sender,
+            #[cfg(feature = "distributed")]
+            decision_receiver,
         }
     }
 
@@ -226,7 +260,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
     /// let mut transaction = khonsu.start_transaction();
     ///
     /// let key = "my_data".to_string();
@@ -458,16 +492,15 @@ impl Transaction {
     /// # let resolution = ConflictResolution::Fail;
     /// # let khonsu = Khonsu::new(storage, isolation, resolution);
     /// let mut transaction = khonsu.start_transaction();
+    /// # let txn_id = transaction.id();
     ///
-    /// let key = "old_data";
-    /// match transaction.delete(key) {
-    ///     Ok(_) => {
-    ///         println!("Staged deletion for key {}.", key);
-    ///     }
-    ///     Err(e) => {
-    ///         eprintln!("Error staging deletion: {}", e);
-    ///     }
-    /// }
+    /// // Perform some operations...
+    /// // transaction.write(...).unwrap();
+    ///
+    /// // Decide to roll back
+    /// transaction.delete("some_key").unwrap();
+    /// transaction.rollback();
+    /// println!("Transaction {} rolled back.", txn_id);
     /// ```
     pub fn delete(&mut self, key: &str) -> Result<()> {
         let key_string = key.to_string();
@@ -604,30 +637,32 @@ impl Transaction {
         let conflicts = match self.isolation_level {
             TransactionIsolation::Serializable => {
                 // For Serializable, perform SSI validation ONLY.
-                // let write_set_keys: HashSet<String> = write_set_to_apply.keys().cloned().collect(); // Moved up
+                // We need a "pre-commit" timestamp for SSI validation before proposing to OmniPaxos.
+                // Using the current transaction counter value + 1 as a potential commit timestamp.
+                let potential_commit_timestamp =
+                    self.transaction_counter.load(Ordering::SeqCst) + 1;
                 if !self.dependency_tracker.validate_serializability(
                     self.id,
-                    commit_timestamp, // Pass commit_ts
+                    potential_commit_timestamp, // Use potential commit_ts for validation
                     &self.read_set,
-                    &write_set_keys,  // Use cloned keys
-                    &self.txn_buffer, // Pass buffer
+                    &write_set_keys,
+                    &self.txn_buffer,
                 )? {
                     // SSI validation failed (backward or forward check).
                     self.dependency_tracker.mark_aborted(self.id); // Mark as aborted in tracker
                     return Err(KhonsuError::TransactionConflict);
                 }
-                // If SSI validation passes, assume no conflicts for this level.
+                // If SSI validation passes, assume no conflicts for this level locally.
                 HashMap::new() // Return empty conflicts
             }
             TransactionIsolation::ReadCommitted | TransactionIsolation::RepeatableRead => {
-                // For other levels, perform standard OCC conflict detection.
+                // For other levels, perform standard OCC conflict detection against the current buffer state.
                 detect_conflicts(
                     self.id, // Pass start_ts (which is id)
                     self.isolation_level,
                     &self.read_set,
                     &write_set_to_apply, // Pass original write_set map
                     &self.txn_buffer,
-                    // &self.dependency_tracker, // Removed tracker argument
                 )?
             }
         };
@@ -681,32 +716,106 @@ impl Transaction {
             }
         }
 
-        // Phase 2: Apply Changes
-        let mut mutations_to_persist: Vec<StorageMutation> = Vec::new();
-        for (key, change) in write_set_to_apply.drain() {
-            match change {
-                Some(record_batch) => {
-                    // Use commit_timestamp as the version for the new value
-                    let versioned_value =
-                        VersionedValue::new(Arc::new(record_batch.clone()), commit_timestamp);
-                    self.txn_buffer.insert(key.clone(), versioned_value);
-                    mutations_to_persist.push(StorageMutation::Insert(key, record_batch));
+        // If distributed feature is enabled, propose to OmniPaxos
+        #[cfg(feature = "distributed")]
+        {
+            if let Some(distributed_manager_sender) = self.distributed_manager_sender {
+                if let Some(decision_receiver) = self.decision_receiver {
+                    // Create the replicated commit message
+                    let replicated_commit = crate::distributed::ReplicatedCommit {
+                        transaction_id: self.id,
+                        write_set: write_set_to_apply, // Move the write set into the replicated message
+                                                       // TODO: Add read_set if needed for distributed validation/recovery
+                    };
+
+                    // Send the commit proposal to the DistributedCommitManager
+                    if let Err(e) = distributed_manager_sender.send(replicated_commit) {
+                        eprintln!(
+                            "Error sending commit proposal to DistributedCommitManager: {:?}",
+                            e
+                        );
+                        self.dependency_tracker.mark_aborted(self.id);
+                        return Err(KhonsuError::DistributedCommitError(format!(
+                            "Failed to send commit proposal: {:?}",
+                            e
+                        )));
+                    }
+
+                    // Wait for the decision from the DistributedCommitManager
+                    match decision_receiver.recv() {
+                        Ok(DistributedCommitOutcome::Committed) => {
+                            debug!("Transaction {} committed via OmniPaxos.", self.id);
+                            // The actual application of changes and marking as committed in tracker
+                            // will happen in the DistributedCommitManager when the entry is decided.
+                            Ok(())
+                        }
+                        Ok(DistributedCommitOutcome::Aborted) => {
+                            debug!(
+                                "Transaction {} aborted by DistributedCommitManager.",
+                                self.id
+                            );
+                            // The marking as aborted in tracker will happen in the DistributedCommitManager.
+                            Err(KhonsuError::TransactionConflict) // Or a specific distributed abort error
+                        }
+                        Err(e) => {
+                            eprintln!("Error receiving DistributedCommitManager decision for transaction {}: {:?}", self.id, e);
+                            self.dependency_tracker.mark_aborted(self.id);
+                            Err(KhonsuError::DistributedCommitError(format!(
+                                "Failed to receive DistributedCommitManager decision: {:?}",
+                                e
+                            )))
+                        }
+                    }
+                } else {
+                    // Distributed feature enabled but no decision receiver provided
+                    eprintln!("Distributed feature enabled but no decision receiver provided for transaction {}.", self.id);
+                    self.dependency_tracker.mark_aborted(self.id);
+                    Err(KhonsuError::DistributedCommitError(
+                        "No DistributedCommitManager decision receiver available".to_string(),
+                    ))
                 }
-                None => {
-                    self.txn_buffer.delete(&key.clone());
-                    mutations_to_persist.push(StorageMutation::Delete(key));
-                }
+            } else {
+                // Distributed feature enabled but no DistributedCommitManager sender provided
+                eprintln!("Distributed feature enabled but no DistributedCommitManager sender provided for transaction {}.", self.id);
+                self.dependency_tracker.mark_aborted(self.id);
+                Err(KhonsuError::DistributedCommitError(
+                    "No DistributedCommitManager sender available".to_string(),
+                ))
             }
         }
 
-        self.storage.apply_mutations(mutations_to_persist)?;
+        #[cfg(not(feature = "distributed"))]
+        {
+            // If distributed feature is NOT enabled, proceed with local commit
+            debug!("Transaction {} committing locally.", self.id);
 
-        // Mark as committed in tracker
-        // Pass the cloned write_set_keys
-        self.dependency_tracker
-            .mark_committed(self.id, commit_timestamp, write_set_keys);
+            // Phase 2: Apply Changes (Local)
+            let mut mutations_to_persist: Vec<StorageMutation> = Vec::new();
+            for (key, change) in write_set_to_apply.drain() {
+                match change {
+                    Some(record_batch) => {
+                        // Use commit_timestamp as the version for the new value
+                        let versioned_value =
+                            VersionedValue::new(Arc::new(record_batch.clone()), commit_timestamp);
+                        self.txn_buffer.insert(key.clone(), versioned_value);
+                        mutations_to_persist.push(StorageMutation::Insert(key, record_batch));
+                    }
+                    None => {
+                        self.txn_buffer.delete(&key.clone());
+                        mutations_to_persist.push(StorageMutation::Delete(key));
+                    }
+                }
+            }
 
-        Ok(())
+            self.storage.apply_mutations(mutations_to_persist)?;
+
+            // Mark as committed in tracker
+            // Pass the cloned write_set_keys
+            self.dependency_tracker
+                .mark_committed(self.id, commit_timestamp, write_set_keys);
+
+            Ok(())
+        }
     }
 
     /// Aborts the transaction, discarding staged changes.
@@ -722,6 +831,8 @@ impl Transaction {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
+    /// use std::collections::HashMap;
+    /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
     /// # use ahash::AHashMap as HashMap;
@@ -764,7 +875,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
     /// let mut transaction = khonsu.start_transaction();
     /// # let txn_id = transaction.id();
     ///
@@ -772,6 +883,7 @@ impl Transaction {
     /// // transaction.write(...).unwrap();
     ///
     /// // Decide to roll back
+    /// transaction.delete("some_key").unwrap();
     /// transaction.rollback();
     /// println!("Transaction {} rolled back.", txn_id);
     /// ```

@@ -4,9 +4,14 @@ use std::sync::Arc;
 use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::dependency_tracking::DependencyTracker;
-use crate::storage::Storage; // Import the Storage trait
+use crate::prelude::dist_config::KhonsuDistConfig;
+use crate::prelude::manager::DistributedCommitManager;
+use crate::storage::Storage;
 use crate::transaction::Transaction;
 use crate::TransactionIsolation;
+
+#[cfg(feature = "distributed")]
+use crate::distributed::prelude::*;
 
 /// Konshu Prelude
 pub mod prelude {
@@ -37,6 +42,10 @@ pub struct Khonsu {
     default_conflict_resolution: ConflictResolution,
     /// Tracks dependencies between transactions for serializability.
     pub dependency_tracker: Arc<DependencyTracker>, // Made public for testing
+
+    #[cfg(feature = "distributed")]
+    /// The manager for distributed commit functionality.
+    distributed_manager: Option<DistributedCommitManager>,
 }
 
 impl Khonsu {
@@ -46,6 +55,9 @@ impl Khonsu {
     /// the transaction buffer, transaction counter, storage interface, and
     /// dependency tracker.
     ///
+    /// When the `distributed` feature is enabled, it also initializes and starts
+    /// the `DistributedCommitManager`.
+    ///
     /// # Arguments
     ///
     /// * `storage` - An `Arc` to an implementation of the `Storage` trait,
@@ -54,12 +66,19 @@ impl Khonsu {
     ///   to use for new transactions created by this instance.
     /// * `default_conflict_resolution` - The default `ConflictResolution` strategy
     ///   to use for new transactions created by this instance.
+    /// * `config` - Optional `KhonsuConfig` for distributed mode (required if `distributed` feature is enabled).
+    ///
+    /// # Returns
+    ///
+    /// A new `Khonsu` instance.
     ///
     /// # Examples
     ///
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
+    /// use std::collections::HashMap;
+    /// use std::path::PathBuf;
     ///
     /// # use parking_lot::Mutex;
     /// # use ahash::AHashMap as HashMap;
@@ -101,24 +120,81 @@ impl Khonsu {
     /// // Assuming MockStorage (or your own storage integration),
     /// // TransactionIsolation, and ConflictResolution are defined
     /// // and available in your scope.
+    /// use omnipaxos::util::{ClusterConfig, NodeId};
+    ///
     /// let storage = Arc::new(MockStorage::new());
     /// let isolation = TransactionIsolation::Serializable;
     /// let resolution = ConflictResolution::Fail;
     ///
-    /// let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// // For non-distributed usage:
+    /// let khonsu = Khonsu::new(storage.clone(), isolation, resolution, None);
+    ///
+    /// // For distributed usage (with 'distributed' feature enabled):
+    /// let config = KhonsuConfig {
+    ///     node_id: 1,
+    ///     cluster_config: ClusterConfig::new(vec![1, 2, 3]),
+    ///     peer_addrs: HashMap::from([(2, "http://127.0.0.1:50052".to_string()), (3, "http://127.0.0.1:50053".to_string())]),
+    ///     storage_path: PathBuf::from("/tmp/khonsu_node1_rocksdb"),
+    /// };
+    /// let khonsu_distributed = Khonsu::new(storage, isolation, resolution, Some(config));
     /// ```
     pub fn new(
         storage: Arc<dyn Storage>,
         default_isolation_level: TransactionIsolation,
         default_conflict_resolution: ConflictResolution,
+        #[cfg(feature = "distributed")] config: Option<KhonsuDistConfig>,
     ) -> Self {
-        Self {
-            txn_buffer: Arc::new(TxnBuffer::new()),
-            transaction_counter: Arc::new(AtomicU64::new(0)),
-            storage,
-            default_isolation_level,
-            default_conflict_resolution,
-            dependency_tracker: Arc::new(DependencyTracker::new()), // Initialize DependencyTracker
+        let txn_buffer = Arc::new(TxnBuffer::new());
+        let transaction_counter = Arc::new(AtomicU64::new(0));
+        let dependency_tracker = Arc::new(DependencyTracker::new());
+
+        #[cfg(feature = "distributed")]
+        {
+            if let Some(config) = config {
+                let distributed_manager = DistributedCommitManager::new(
+                    config.node_id,
+                    config.cluster_config,
+                    config.peer_addrs,
+                    &config.storage_path,
+                    Arc::clone(&txn_buffer),
+                    Arc::clone(&dependency_tracker),
+                    Arc::clone(&storage),
+                )
+                .expect("Failed to create DistributedCommitManager"); // TODO: Handle errors properly
+
+                Self {
+                    txn_buffer,
+                    transaction_counter,
+                    storage,
+                    default_isolation_level,
+                    default_conflict_resolution,
+                    dependency_tracker,
+                    distributed_manager: Some(distributed_manager),
+                }
+            } else {
+                // Distributed feature enabled but no config provided
+                Self {
+                    txn_buffer,
+                    transaction_counter,
+                    storage,
+                    default_isolation_level,
+                    default_conflict_resolution,
+                    dependency_tracker,
+                    distributed_manager: None,
+                }
+            }
+        }
+        #[cfg(not(feature = "distributed"))]
+        {
+            // Distributed feature not enabled
+            Self {
+                txn_buffer,
+                transaction_counter,
+                storage,
+                default_isolation_level,
+                default_conflict_resolution,
+                dependency_tracker,
+            }
         }
     }
 
@@ -140,6 +216,8 @@ impl Khonsu {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
+    /// use std::collections::HashMap;
+    /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
     /// # use ahash::AHashMap as HashMap;
@@ -183,7 +261,7 @@ impl Khonsu {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
     ///
     /// let mut transaction = khonsu.start_transaction();
     /// // Use the transaction to perform operations...
@@ -201,8 +279,25 @@ impl Khonsu {
             Arc::clone(&self.storage),    // Pass a clone of the storage Arc
             self.default_conflict_resolution,
             Arc::clone(&self.dependency_tracker), // Pass a clone of the dependency tracker Arc
+            #[cfg(feature = "distributed")]
+            self.distributed_manager
+                .as_ref()
+                .map(|m| m.get_omni_paxos_sender()), // Pass sender to manager
+            #[cfg(feature = "distributed")]
+            self.distributed_manager
+                .as_ref()
+                .map(|m| m.get_decision_receiver()), // Pass receiver from manager
         )
     }
 
     // TODO: Add methods for registering the TwoPhaseCommitParticipant trait if needed externally.
+}
+
+#[cfg(feature = "distributed")]
+impl Khonsu {
+    /// Provides access to the distributed commit manager if the feature is enabled.
+    #[cfg(feature = "distributed")]
+    pub fn distributed_manager(&self) -> Option<&DistributedCommitManager> {
+        self.distributed_manager.as_ref()
+    }
 }

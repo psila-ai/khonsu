@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package paxos_service;
+
+// Import necessary types from Multi Paxos if they have protobuf definitions,
+// otherwise define equivalent structures.
+// For simplicity, we'll define basic message structures here that can
+// encapsulate Multi Paxos's internal messages.
+
+// Represents a message exchanged between Multi Paxos nodes.
+// This is a simplified representation; a real implementation might need
+// to serialize Multi Paxos's internal Message enum.
+message ConsensusMessage {
+    uint64 sender_id = 1;
+    uint64 receiver_id = 2;
+    // Placeholder for the actual Multi Paxos message payload.
+    // This would need to be a serialized representation of omnipaxos::messages::Message.
+    bytes message_payload = 3;
+}
+
+// Represents the data for a replicated transaction commit.
+// This mirrors the ReplicatedCommit struct in Rust.
+message ReplicatedCommitMessage {
+    uint64 transaction_id = 1;
+    // Representing the write_set. This is a simplified map;
+    // serializing complex types like RecordBatch in protobuf requires careful consideration.
+    // For now, let's use bytes and handle serialization/deserialization manually in Rust.
+    map<string, bytes> write_set = 2; // Map of key (string) to serialized VersionedValue (bytes)
+}
+
+
+// Service definition for Multi Paxos communication.
+service PaxosService {
+    // A simple RPC for sending a message to another Multi Paxos node.
+    rpc SendMessage (ConsensusMessage) returns (SendMessageResponse);
+}
+
+// Response for the SendMessage RPC.
+message SendMessageResponse {
+    // Could include a status or acknowledgment if needed.
+    bool success = 1;
+}

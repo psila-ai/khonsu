@@ -18,6 +18,14 @@ pub enum KhonsuError {
     #[error("Storage error: {0}")]
     StorageError(String),
 
+    /// Represents an error that occurred during interaction with the serialization.
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+
+    /// Indicates the rollback
+    #[error("Rollback: {0}")]
+    RollbackError(String),
+
     /// Indicates an error during manipulation or processing of Arrow data (RecordBatches).
     /// This could arise from issues with schema compatibility, data conversion, or other Arrow-related operations.
     #[error("Arrow manipulation error: {0}")]
