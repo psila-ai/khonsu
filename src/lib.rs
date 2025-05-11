@@ -117,7 +117,7 @@
 //!
 //! ## References of Khonsu Implementation
 //! Below you can find the research papers and various serializable checking mechanisms that is implemented in Khonsu.
-//! ```
+//! ```text
 //! @inproceedings{bailis2014highly,
 //!   title={Highly available transactions: Virtues and limitations},
 //!   author={Bailis, Peter and Ghodsi, Ali and Hellerstein, Joseph M and Stoica, Ion},
@@ -202,11 +202,11 @@ pub mod prelude {
     pub use crate::data_store::txn_buffer::*;
     pub use crate::data_store::versioned_value::*;
     pub use crate::dependency_tracking::*;
-    #[cfg(feature = "distributed")]
-    pub use crate::distributed::*;
     pub use crate::errors::*;
     pub use crate::isolation::*;
     pub use crate::khonsu::Khonsu;
     pub use crate::storage::*;
     pub use crate::transaction::Transaction;
+    #[cfg(feature = "distributed")]
+    pub use crate::distributed::*;
 }

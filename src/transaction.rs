@@ -7,11 +7,7 @@ use std::sync::Arc;
 #[cfg(feature = "distributed")]
 use crossbeam_channel as channel; // Use crossbeam for channels
 #[cfg(feature = "distributed")]
-use omnipaxos::messages::Message;
-#[cfg(feature = "distributed")]
-use crate::distributed::channel_ext::{NodeSender, SenderExt};
-#[cfg(feature = "distributed")]
-use std::collections::HashMap as StdHashMap;
+use crate::distributed::channel_ext::{SenderExt};
 
 use crate::conflict::detection::detect_conflicts;
 use crate::conflict::resolution::ConflictResolution;
@@ -19,7 +15,7 @@ use crate::data_store::txn_buffer::TxnBuffer;
 use crate::data_store::versioned_value::VersionedValue;
 use crate::dependency_tracking::{DataItem, DependencyTracker}; // Keep DependencyTracker
 use crate::errors::{KhonsuError, Result};
-use crate::storage::{Storage, StorageMutation};
+use crate::storage::*;
 use crate::TransactionIsolation;
 
 #[cfg(feature = "distributed")]
@@ -80,7 +76,6 @@ impl Transaction {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
-    /// use std::collections::HashMap;
     /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
@@ -124,7 +119,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
     /// let transaction = khonsu.start_transaction();
     /// let transaction_id = transaction.id();
     /// println!("Transaction ID: {}", transaction_id);
@@ -264,7 +259,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
     /// let mut transaction = khonsu.start_transaction();
     ///
     /// let key = "my_data".to_string();
@@ -777,9 +772,9 @@ impl Transaction {
                     let participant_nodes = vec![node_id]; // For now, just include the local node
                     
                     // Convert AHashMap to std::collections::HashMap
-                    let std_write_set: StdHashMap<String, crate::distributed::SerializableVersionedValue> = 
+                    let std_write_set: std::collections::HashMap<String, crate::distributed::SerializableVersionedValue> = 
                         serializable_write_set.into_iter().collect();
-                    let std_read_set: StdHashMap<String, u64> = 
+                    let std_read_set: std::collections::HashMap<String, u64> = 
                         self.read_set.clone().into_iter().collect();
                     
                     // Create the replicated commit message
@@ -895,7 +890,6 @@ impl Transaction {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
-    /// use std::collections::HashMap;
     /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
@@ -939,7 +933,7 @@ impl Transaction {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
     /// let mut transaction = khonsu.start_transaction();
     /// # let txn_id = transaction.id();
     ///

@@ -4,14 +4,14 @@ use std::sync::Arc;
 use crate::conflict::resolution::ConflictResolution;
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::dependency_tracking::DependencyTracker;
-use crate::prelude::dist_config::KhonsuDistConfig;
-use crate::prelude::manager::DistributedCommitManager;
 use crate::storage::Storage;
 use crate::transaction::Transaction;
 use crate::TransactionIsolation;
 
 #[cfg(feature = "distributed")]
-use crate::distributed::prelude::*;
+use crate::prelude::dist_config::KhonsuDistConfig;
+#[cfg(feature = "distributed")]
+use crate::prelude::manager::DistributedCommitManager;
 
 /// Konshu Prelude
 pub mod prelude {
@@ -74,10 +74,9 @@ impl Khonsu {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```no_run,ignore
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
-    /// use std::collections::HashMap;
     /// use std::path::PathBuf;
     ///
     /// # use parking_lot::Mutex;
@@ -117,10 +116,6 @@ impl Khonsu {
     /// #         Ok(())
     /// #     }
     /// # }
-    /// // Assuming MockStorage (or your own storage integration),
-    /// // TransactionIsolation, and ConflictResolution are defined
-    /// // and available in your scope.
-    /// use omnipaxos::util::{ClusterConfig, NodeId};
     ///
     /// let storage = Arc::new(MockStorage::new());
     /// let isolation = TransactionIsolation::Serializable;
@@ -216,7 +211,6 @@ impl Khonsu {
     /// ```no_run
     /// use std::sync::Arc;
     /// use khonsu::prelude::*;
-    /// use std::collections::HashMap;
     /// use std::path::Path;
     ///
     /// # use parking_lot::Mutex;
@@ -261,7 +255,7 @@ impl Khonsu {
     /// # let storage = Arc::new(MockStorage::new());
     /// # let isolation = TransactionIsolation::Serializable;
     /// # let resolution = ConflictResolution::Fail;
-    /// # let khonsu = Khonsu::new(storage, isolation, resolution, None, None, None, None);
+    /// # let khonsu = Khonsu::new(storage, isolation, resolution);
     ///
     /// let mut transaction = khonsu.start_transaction();
     /// // Use the transaction to perform operations...

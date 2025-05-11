@@ -19,5 +19,6 @@ b:
 test:
 	cargo test
 
+# Below is for non distributed single threaded tests.
 stest:
-	cargo test -- --test-threads=1
+	cargo test --no-default-features -- --test-threads=1

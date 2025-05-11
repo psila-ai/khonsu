@@ -1,9 +1,8 @@
 use crossbeam_channel::{bounded, Receiver, Sender};
 use omnipaxos::{
-    messages::Message, util::NodeId, ClusterConfig, OmniPaxos, OmniPaxosConfig, ServerConfig,
+    messages::Message, util::NodeId, ClusterConfig, OmniPaxosConfig, ServerConfig,
 };
 use std::collections::HashMap;
-use ahash::AHashSet as HashSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::Arc;
@@ -13,13 +12,13 @@ use tokio::runtime::Runtime;
 
 use crate::data_store::txn_buffer::TxnBuffer;
 use crate::data_store::versioned_value::VersionedValue;
-use crate::dependency_tracking::{DataItem, DependencyTracker};
+use crate::dependency_tracking::DependencyTracker;
 use crate::distributed::{
     channel_ext::NodeSender,
     grpc_server::start_grpc_server,
     network::KhonsuNetwork,
     storage::DistributedCommitStorage,
-    twopc::{TwoPhaseCommitManager, TwoPhaseCommitTransaction, ParticipantState},
+    twopc::{TwoPhaseCommitManager, ParticipantState},
     GlobalTransactionId,
     ReplicatedCommit,
     SerializableVersionedValue,

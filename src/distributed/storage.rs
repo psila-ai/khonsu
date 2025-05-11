@@ -1,6 +1,6 @@
 use crate::errors::*;
 use bincode;
-use omnipaxos::storage::{Entry, StopSign, Storage, StorageOp, StorageResult};
+use omnipaxos::storage::{StopSign, Storage, StorageOp, StorageResult};
 use omnipaxos::ballot_leader_election::Ballot;
 use rocksdb::{Options, WriteBatch, DB};
 use serde::{Deserialize, Serialize};

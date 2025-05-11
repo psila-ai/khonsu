@@ -10,7 +10,6 @@ use tokio::runtime::Runtime;
 use crate::distributed::paxos_service::paxos_service_client::PaxosServiceClient;
 use crate::distributed::paxos_service::ConsensusMessage;
 use crate::distributed::ReplicatedCommit;
-use crate::errors::KhonsuError;
 
 /// Network implementation for OmniPaxos using gRPC.
 #[cfg(feature = "distributed")]

@@ -18,18 +18,15 @@ pub struct KhonsuOmniPaxosService {
     // Sender channel to the OmniPaxos event loop thread.
     // Received gRPC messages will be sent through this channel.
     omni_paxos_sender: Sender<Message<ReplicatedCommit>>,
-    // Local node ID
-    node_id: NodeId,
 }
 
 impl KhonsuOmniPaxosService {
     pub fn new(
         omni_paxos_sender: Sender<Message<ReplicatedCommit>>,
-        node_id: NodeId,
+        _node_id: NodeId, // Keep parameter but ignore it
     ) -> Self {
         Self { 
             omni_paxos_sender,
-            node_id,
         }
     }
 }

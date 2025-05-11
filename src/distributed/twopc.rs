@@ -7,7 +7,7 @@
 use crate::distributed::{GlobalTransactionId, ReplicatedCommit, TransactionState};
 use crate::errors::KhonsuError;
 use omnipaxos::util::NodeId;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use parking_lot::RwLock;
@@ -303,7 +303,7 @@ impl TwoPhaseCommitManager {
 
     /// Checks for timed out transactions and aborts them.
     pub fn check_timeouts(&self) -> Vec<GlobalTransactionId> {
-        let now = Instant::now();
+        let _now = Instant::now();
         let mut timed_out_transactions = Vec::new();
 
         let mut transactions = self.transactions.write();
