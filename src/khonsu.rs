@@ -264,6 +264,9 @@ impl Khonsu {
         // Atomically increment the transaction counter to get a unique ID.
         let transaction_id = self.transaction_counter.fetch_add(1, Ordering::SeqCst);
 
+        #[cfg(feature = "distributed")]
+        let decision_receiver = self.distributed_manager.as_ref().map(|m| m.create_decision_receiver(transaction_id));
+
         // Create a new Transaction instance, passing the necessary information.
         Transaction::new(
             transaction_id,
@@ -278,7 +281,7 @@ impl Khonsu {
                 .as_ref()
                 .map(|m| m.get_transaction_sender()), // Pass sender to manager
             #[cfg(feature = "distributed")]
-            None, // We'll create the receiver when needed
+            decision_receiver, // Pass the decision receiver
         )
     }
 }

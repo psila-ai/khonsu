@@ -1,4 +1,4 @@
-.PHONY: w b test stest
+.PHONY: w b test stest dtest
 
 define DEBUGBUILDNOTIF
     ____       __                   ____        _ __    __
@@ -22,3 +22,7 @@ test:
 # Below is for non distributed single threaded tests.
 stest:
 	cargo test --no-default-features -- --test-threads=1
+
+# Below is for distributed tests with the distributed feature enabled.
+dtest:
+	cargo test --features distributed -- --test-threads=1

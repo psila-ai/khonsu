@@ -36,5 +36,9 @@ optional = true
 tonic-build = "0.13"
 prost-build = "0.13"
 
+[dev-dependencies]
+rand = "0.9.1"
+tempfile = "3.19.1"
+
 [package.metadata."docs.rs"]
 all-features = true
