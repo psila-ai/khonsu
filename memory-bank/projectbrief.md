@@ -11,7 +11,8 @@
 - Provide conflict resolution strategies: append, ignore, replace, fail.
 - Ensure complete rollback to the previous state on transaction abort.
 - Support configurable transaction isolation levels: ReadCommitted, RepeatableRead, Serializable.
-- Design for future extension to support distributed commit.
+- Implement distributed commit using OmniPaxos for consensus and Two-Phase Commit (2PC) for transaction coordination.
+- Ensure crash tolerance and recovery for distributed transactions.
 - Adhere to constraints: no Arrow compute feature, implement arithmetic scalar operations manually, run tests single-threaded.
 
 ## Goals

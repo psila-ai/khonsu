@@ -16,7 +16,8 @@ The library addresses the challenge of ensuring data consistency and integrity i
 - Based on the configured isolation level and conflict resolution strategy, conflicts are handled appropriately.
 - Successful transactions are applied atomically, making their changes visible.
 - Failed transactions or explicit rollbacks discard staged changes.
-- **Persistence and Recovery:** Committed transactions and operations must be durably persisted to enable crash tolerance and Point-in-Time Recovery (PITR).
+- **Persistence and Recovery:** Committed transactions and operations are durably persisted to RocksDB, enabling crash tolerance and Point-in-Time Recovery (PITR). The system can recover from node failures while maintaining consistency.
+- **Distributed Transactions:** The system supports distributed transactions across multiple nodes, with OmniPaxos for consensus and Two-Phase Commit (2PC) for transaction coordination. This ensures that all nodes either commit or abort a transaction atomically, even in the presence of node failures.
 
 ## User Experience Goals
 

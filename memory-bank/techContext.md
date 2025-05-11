@@ -5,10 +5,11 @@
 - **Rust:** The primary programming language for its memory safety, performance, and concurrency features.
 - **Arrow:** Used for representing and manipulating tabular data (rows and columns) in the form of RecordBatches.
 - **Atomic Operations:** Leveraging Rust's `std::sync::atomic` for lock-free programming.
-- **OmniPaxos:** Used for achieving consensus on transaction commits in the distributed commit process (gated by the `distributed` feature).
+- **OmniPaxos:** Used for achieving consensus on transaction commits in the distributed commit process (gated by the `distributed` feature). Combined with Two-Phase Commit (2PC) for transaction coordination to create a crash-resistant distributed transaction system.
 - **Crossbeam Channels:** Used for inter-thread communication, particularly between the main Khonsu thread and the OmniPaxos event loop thread managed by the `DistributedCommitManager` (gated by the `distributed` feature).
-- **RocksDB:** Used as the local write-ahead log (WAL) for the `DistributedCommitStorage` implementation, ensuring persistence and supporting crash tolerance and PITR (gated by the `distributed` feature).
-- **gRPC:** Used for inter-node network communication in the distributed commit process (gated by the `distributed` feature).
+- **RocksDB:** Used as the local write-ahead log (WAL) for the `DistributedCommitStorage` implementation, ensuring persistence and supporting crash tolerance and PITR (gated by the `distributed` feature). All transaction state and OmniPaxos log entries are persisted to RocksDB, allowing nodes to recover their state after a crash.
+- **gRPC:** Used for inter-node network communication in the distributed commit process (gated by the `distributed` feature). Implemented with Tokio for async operations.
+- **Arrow IPC Format:** Used for serializing Arrow RecordBatches for network transmission in the distributed commit process.
 
 ## Development Setup
 
