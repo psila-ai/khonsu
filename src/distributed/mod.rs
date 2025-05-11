@@ -1,12 +1,49 @@
-// This module contains the distributed commit implementation using OmniPaxos.
+//! # Distributed Transaction System
+//!
+//! This module contains the distributed commit implementation using a Two-Phase Commit (2PC) protocol
+//! over a multi paxos consensus algorithm. It enables transactions to span multiple nodes while
+//! maintaining ACID properties across the distributed system.
+//!
+//! ## Architecture
+//!
+//! The distributed system consists of several components:
+//!
+//! - **DistributedCommitManager**: Coordinates the distributed commit process
+//! - **Two-Phase Commit (2PC)**: Ensures atomicity across nodes
+//! - **Multi Paxos Consensus**: Provides fault tolerance and consistency
+//! - **gRPC Communication**: Enables network communication between nodes
+//! - **RocksDB Storage**: Provides durability for the commit log
+//!
+//! ## Modules
+//!
+//! - `channel_ext`: Extensions for communication channels with node identification
+//! - `dist_config`: Configuration structures for distributed operation
+//! - `grpc_server`: gRPC server implementation for inter-node communication
+//! - `manager`: Implementation of the DistributedCommitManager
+//! - `network`: Network communication layer for consensus messages
+//! - `storage`: Persistent storage implementation for the commit log
+//! - `twopc`: Two-Phase Commit protocol implementation
+//!
+//! ## Crash Recovery
+//!
+//! The system is designed to be crash-resistant. When a node crashes and restarts:
+//!
+//! 1. It recovers its state from the persistent storage
+//! 2. It rejoins the cluster and catches up on missed transactions
+//! 3. It participates in new distributed transactions
+//!
+//! ## Limitations
+//!
+//! - Only Read Committed isolation is fully supported in distributed mode
+//! - Repeatable Read and Serializable isolation have limitations in distributed settings
 
-pub mod channel_ext; // Module for channel extensions
+pub mod channel_ext;
 pub mod dist_config;
-pub mod grpc_server; // Module for the gRPC server implementation
-pub mod manager; // Module for the DistributedCommitManager
-pub mod network; // Module for OmniPaxos network implementation
-pub mod storage; // Module for OmniPaxos storage backend
-pub mod twopc; // Module for the Two-Phase Commit implementation
+pub mod grpc_server;
+pub mod manager;
+pub mod network;
+pub mod storage;
+pub mod twopc;
 
 use crate::data_store::versioned_value::VersionedValue;
 use arrow::record_batch::RecordBatch;

@@ -1,3 +1,65 @@
+//! # Distributed Commit Manager
+//!
+//! This module provides the `DistributedCommitManager` which coordinates the distributed commit
+//! process using a Two-Phase Commit (2PC) protocol over a multi paxos consensus algorithm.
+//!
+//! ## Architecture
+//!
+//! The `DistributedCommitManager` is responsible for:
+//!
+//! 1. Coordinating the 2PC protocol across nodes
+//! 2. Managing the consensus process for transaction commits
+//! 3. Handling node failures and recovery
+//! 4. Applying committed transactions to the local state
+//!
+//! ## Example: Using the DistributedCommitManager
+//!
+//! ```no_run
+//! # use std::sync::Arc;
+//! # use std::collections::HashMap;
+//! # use std::path::PathBuf;
+//! # use khonsu::prelude::*;
+//! # use khonsu::data_store::txn_buffer::TxnBuffer;
+//! # use khonsu::dependency_tracking::DependencyTracker;
+//! # use khonsu::storage::Storage;
+//! # use khonsu::errors::Result;
+//! # use omnipaxos::ClusterConfig;
+//! # use khonsu::distributed::manager::DistributedCommitManager;
+//! # struct MockStorage;
+//! # impl Storage for MockStorage {
+//! #     fn apply_mutations(&self, _mutations: Vec<StorageMutation>) -> Result<()> { Ok(()) }
+//! # }
+//! # let txn_buffer = Arc::new(TxnBuffer::new());
+//! # let dependency_tracker = Arc::new(DependencyTracker::new());
+//! # let storage = Arc::new(MockStorage);
+//! // Create a cluster configuration
+//! let node_id = 1;
+//! let cluster_config = ClusterConfig {
+//!     configuration_id: 1,
+//!     nodes: vec![1, 2, 3], // A 3-node cluster
+//!     flexible_quorum: None,
+//! };
+//!
+//! // Define peer addresses for gRPC communication
+//! let mut peer_addrs = HashMap::new();
+//! peer_addrs.insert(2, "127.0.0.1:50052".to_string());
+//! peer_addrs.insert(3, "127.0.0.1:50053".to_string());
+//!
+//! // Create a storage path for the distributed commit log
+//! let storage_path = PathBuf::from("/tmp/khonsu-node1");
+//!
+//! // Create a DistributedCommitManager
+//! let manager = DistributedCommitManager::new(
+//!     node_id,
+//!     cluster_config,
+//!     peer_addrs,
+//!     &storage_path,
+//!     txn_buffer,
+//!     dependency_tracker,
+//!     storage,
+//! ).expect("Failed to create DistributedCommitManager");
+//! ```
+
 use crossbeam_channel::{bounded, Receiver, Sender};
 use omnipaxos::{messages::Message, util::NodeId, ClusterConfig, OmniPaxosConfig, ServerConfig};
 use std::collections::HashMap;
@@ -29,13 +91,13 @@ enum ManagerCommand {
     Shutdown,
 }
 
-/// Manages the distributed commit process using OmniPaxos and gRPC.
+/// Manages the distributed commit process using multi paxos consensus and gRPC.
 pub struct DistributedCommitManager {
-    // OmniPaxos instance
+    // Multi paxos instance
     node_id: NodeId,
     // Cluster configuration
     cluster_config: ClusterConfig,
-    // Channels for communication with the OmniPaxos event loop
+    // Channels for communication with the multi paxos event loop
     event_loop_sender: Sender<ManagerCommand>,
     // Channels for communication with transactions
     transaction_sender: Sender<ReplicatedCommit>,
@@ -163,7 +225,7 @@ impl DistributedCommitManager {
                 // Process commands from the main thread
                 match event_loop_receiver.try_recv() {
                     Ok(ManagerCommand::Shutdown) => {
-                        println!("OmniPaxos event loop shutting down");
+                        println!("Multi paxos event loop shutting down");
                         break;
                     }
                     Err(_) => {
@@ -279,7 +341,7 @@ impl DistributedCommitManager {
         })
     }
 
-    /// Processes a decided entry from OmniPaxos.
+    /// Processes a decided entry from the multi paxos consensus log.
     ///
     /// This method applies the changes from a committed transaction to the local state.
     #[allow(clippy::too_many_arguments)]
@@ -474,7 +536,7 @@ impl DistributedCommitManager {
         dependency_tracker.mark_committed(txn_id, commit_timestamp, write_set_keys);
     }
 
-    /// Proposes a transaction commit to OmniPaxos.
+    /// Proposes a transaction commit to the multi paxos consensus system.
     ///
     /// This method is called by the Transaction when it wants to commit.
     /// It creates a ReplicatedCommit and proposes it to OmniPaxos.
@@ -565,7 +627,7 @@ impl DistributedCommitManager {
         // Send the ReplicatedCommit to the transaction_sender
         if let Err(e) = self.transaction_sender.send(replicated_commit) {
             return Err(KhonsuError::DistributedCommitError(format!(
-                "Failed to send transaction to OmniPaxos event loop: {}",
+                "Failed to send transaction to multi paxos event loop: {}",
                 e
             )));
         }
@@ -602,9 +664,9 @@ impl DistributedCommitManager {
         Ok(receiver)
     }
 
-    /// Returns the sender for the OmniPaxos event loop.
+    /// Returns the sender for the multi paxos event loop.
     ///
-    /// This is used by the Transaction to propose commits.
+    /// This is used by the Transaction to propose commits to the distributed consensus system.
     pub fn get_transaction_sender(&self) -> NodeSender {
         NodeSender::new(self.transaction_sender.clone(), self.node_id)
     }
@@ -626,7 +688,7 @@ impl DistributedCommitManager {
         drop(transaction_receivers_lock);
 
         // For testing purposes, immediately send a commit outcome
-        // This is a workaround for the tests, in a real system this would be handled by the OmniPaxos consensus
+        // This is a workaround for the tests, in a real system this would be handled by the multi paxos consensus
         if let Err(e) = sender.send(DistributedCommitOutcome::Committed) {
             eprintln!("Failed to send test commit outcome: {}", e);
         }

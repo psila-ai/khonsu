@@ -163,8 +163,116 @@ pub mod data_store;
 ///
 /// Inter/Intra data dependency tracking
 pub mod dependency_tracking;
-///
 /// 2PC Mechanism & Distributed Commit Integration
+///
+/// This module provides distributed transaction capabilities using a Two-Phase Commit (2PC) protocol
+/// over a multi paxos consensus algorithm. It enables transactions to span multiple nodes while
+/// maintaining ACID properties across the distributed system.
+///
+/// # Feature Flag
+///
+/// This module is only available when the `distributed` feature is enabled:
+///
+/// ```toml
+/// [dependencies]
+/// khonsu = { version = "0.1.0", features = ["distributed"] }
+/// ```
+///
+/// # Example: Setting up a distributed Khonsu cluster
+///
+/// ```no_run
+/// # use std::sync::Arc;
+/// # use std::collections::HashMap;
+/// # use khonsu::prelude::*;
+/// # use khonsu::storage::Storage;
+/// # use khonsu::errors::Result;
+/// # use omnipaxos::ClusterConfig;
+/// # use khonsu::distributed::dist_config::KhonsuDistConfig;
+/// # #[derive(Default)]
+/// # struct MockStorage;
+/// # impl Storage for MockStorage {
+/// #     fn apply_mutations(&self, _mutations: Vec<StorageMutation>) -> Result<()> { Ok(()) }
+/// # }
+/// // Create a cluster configuration
+/// let node_id = 1;
+/// let cluster_config = ClusterConfig {
+///     configuration_id: 1,
+///     nodes: vec![1, 2, 3], // A 3-node cluster
+///     flexible_quorum: None,
+/// };
+///
+/// // Define peer addresses for gRPC communication
+/// let mut peer_addrs = HashMap::new();
+/// peer_addrs.insert(2, "127.0.0.1:50052".to_string());
+/// peer_addrs.insert(3, "127.0.0.1:50053".to_string());
+///
+/// // Create a storage path for the distributed commit log
+/// let storage_path = std::path::PathBuf::from("/tmp/khonsu-node1");
+///
+/// // Create a distributed configuration
+/// let dist_config = KhonsuDistConfig {
+///     node_id,
+///     cluster_config,
+///     peer_addrs,
+///     storage_path,
+/// };
+///
+/// // Create a Khonsu instance with distributed capabilities
+/// let storage = Arc::new(MockStorage);
+/// let khonsu = Khonsu::new(
+///     storage,
+///     TransactionIsolation::ReadCommitted, // Only ReadCommitted is fully supported in distributed mode
+///     ConflictResolution::Fail,
+///     Some(dist_config), // Pass the distributed configuration
+/// );
+///
+/// // Now you can use khonsu for distributed transactions
+/// ```
+///
+/// # Example: Performing a distributed transaction
+///
+/// ```no_run
+/// # use std::sync::Arc;
+/// # use khonsu::prelude::*;
+/// # use arrow::record_batch::RecordBatch;
+/// # use arrow::array::Int32Array;
+/// # use arrow::datatypes::{Schema, Field, DataType};
+/// # use omnipaxos::ClusterConfig;
+/// # use khonsu::distributed::dist_config::KhonsuDistConfig;
+/// # #[derive(Default)]
+/// # struct MockStorage;
+/// # impl Storage for MockStorage {
+/// #     fn apply_mutations(&self, _mutations: Vec<StorageMutation>) -> Result<()> { Ok(()) }
+/// # }
+/// # let storage = Arc::new(MockStorage::default());
+/// # let khonsu = Arc::new(Khonsu::new(
+/// #     storage,
+/// #     TransactionIsolation::ReadCommitted,
+/// #     ConflictResolution::Fail,
+/// #     None,
+/// # ));
+/// // Start a transaction
+/// let mut txn = khonsu.start_transaction();
+///
+/// // Create some data
+/// let schema = Arc::new(Schema::new(vec![
+///     Field::new("value", DataType::Int32, false),
+/// ]));
+/// let array = Int32Array::from(vec![100]);
+/// let record_batch = RecordBatch::try_new(
+///     schema,
+///     vec![Arc::new(array)],
+/// ).unwrap();
+///
+/// // Write data that will be replicated to all nodes
+/// txn.write("distributed_key".to_string(), record_batch).unwrap();
+///
+/// // Commit the transaction - this will be replicated to all nodes in the cluster
+/// match txn.commit() {
+///     Ok(_) => println!("Transaction committed and replicated to all nodes"),
+///     Err(e) => println!("Transaction failed: {:?}", e),
+/// }
+/// ```
 #[cfg(feature = "distributed")]
 pub mod distributed;
 ///
