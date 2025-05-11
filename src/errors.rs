@@ -37,6 +37,11 @@ pub enum KhonsuError {
     #[error("Invalid operation for isolation level")]
     InvalidIsolationOperation,
 
+    /// Represents an error that occurred during the distributed commit process.
+    /// This could include network errors, consensus failures, or other distributed-related issues.
+    #[error("Distributed commit error: {0}")]
+    DistributedCommitError(String),
+
     /// A general-purpose error variant for capturing other unexpected issues.
     /// It includes a descriptive string to provide more context about the error.
     #[error("Other error: {0}")]

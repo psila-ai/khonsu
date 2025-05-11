@@ -8,6 +8,10 @@ use std::sync::Arc;
 use crossbeam_channel as channel; // Use crossbeam for channels
 #[cfg(feature = "distributed")]
 use omnipaxos::messages::Message;
+#[cfg(feature = "distributed")]
+use crate::distributed::channel_ext::{NodeSender, SenderExt};
+#[cfg(feature = "distributed")]
+use std::collections::HashMap as StdHashMap;
 
 use crate::conflict::detection::detect_conflicts;
 use crate::conflict::resolution::ConflictResolution;
@@ -55,7 +59,7 @@ pub struct Transaction {
 
     #[cfg(feature = "distributed")]
     /// Sender channel to the DistributedCommitManager for proposing commits.
-    distributed_manager_sender: Option<channel::Sender<crate::distributed::ReplicatedCommit>>,
+    distributed_manager_sender: Option<crate::distributed::channel_ext::NodeSender>,
     #[cfg(feature = "distributed")]
     /// Receiver channel for the DistributedCommitManager's decision on this transaction's commit.
     decision_receiver: Option<channel::Receiver<DistributedCommitOutcome>>,
@@ -160,7 +164,7 @@ impl Transaction {
         conflict_resolution: ConflictResolution,
         dependency_tracker: Arc<DependencyTracker>,
         #[cfg(feature = "distributed")] distributed_manager_sender: Option<
-            channel::Sender<crate::distributed::ReplicatedCommit>,
+            crate::distributed::channel_ext::NodeSender,
         >,
         #[cfg(feature = "distributed")] decision_receiver: Option<
             channel::Receiver<DistributedCommitOutcome>,
@@ -719,14 +723,74 @@ impl Transaction {
         // If distributed feature is enabled, propose to OmniPaxos
         #[cfg(feature = "distributed")]
         {
-            if let Some(distributed_manager_sender) = self.distributed_manager_sender {
+            if let Some(ref distributed_manager_sender) = self.distributed_manager_sender {
                 if let Some(decision_receiver) = self.decision_receiver {
+                    // Get the node ID before using the sender
+                    let node_id = distributed_manager_sender.node_id();
+                    
+                    // Create a global transaction ID
+                    let global_txn_id = crate::distributed::GlobalTransactionId::new(
+                        node_id,
+                        self.id
+                    );
+                    
+                    // Convert the write set to SerializableVersionedValue
+                    let mut serializable_write_set = HashMap::new();
+                    for (key, value_opt) in &write_set_to_apply {
+                        match value_opt {
+                            Some(record_batch) => {
+                                // Create a VersionedValue with a temporary version
+                                let versioned_value = VersionedValue::new(
+                                    Arc::new(record_batch.clone()),
+                                    self.id, // Use transaction ID as temporary version
+                                );
+                                
+                                // Convert to SerializableVersionedValue
+                                match crate::distributed::SerializableVersionedValue::from_versioned_value(&versioned_value) {
+                                    Ok(serializable_value) => {
+                                        serializable_write_set.insert(key.clone(), serializable_value);
+                                    },
+                                    Err(e) => {
+                                        return Err(KhonsuError::SerializationError(format!(
+                                            "Failed to serialize VersionedValue: {}", e
+                                        )));
+                                    }
+                                }
+                            },
+                            None => {
+                                // This is a deletion
+                                serializable_write_set.insert(
+                                    key.clone(),
+                                    crate::distributed::SerializableVersionedValue::new_tombstone(self.id),
+                                );
+                            }
+                        }
+                    }
+                    
+                    // Get the prepare timestamp
+                    let prepare_timestamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    
+                    // Create participant nodes list
+                    let participant_nodes = vec![node_id]; // For now, just include the local node
+                    
+                    // Convert AHashMap to std::collections::HashMap
+                    let std_write_set: StdHashMap<String, crate::distributed::SerializableVersionedValue> = 
+                        serializable_write_set.into_iter().collect();
+                    let std_read_set: StdHashMap<String, u64> = 
+                        self.read_set.clone().into_iter().collect();
+                    
                     // Create the replicated commit message
-                    let replicated_commit = crate::distributed::ReplicatedCommit {
-                        transaction_id: self.id,
-                        write_set: write_set_to_apply, // Move the write set into the replicated message
-                                                       // TODO: Add read_set if needed for distributed validation/recovery
-                    };
+                    let replicated_commit = crate::distributed::ReplicatedCommit::new_prepared(
+                        global_txn_id,
+                        std_write_set,
+                        std_read_set,
+                        prepare_timestamp,
+                        node_id,
+                        participant_nodes,
+                    );
 
                     // Send the commit proposal to the DistributedCommitManager
                     if let Err(e) = distributed_manager_sender.send(replicated_commit) {

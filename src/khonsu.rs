@@ -282,11 +282,9 @@ impl Khonsu {
             #[cfg(feature = "distributed")]
             self.distributed_manager
                 .as_ref()
-                .map(|m| m.get_omni_paxos_sender()), // Pass sender to manager
+                .map(|m| m.get_transaction_sender()), // Pass sender to manager
             #[cfg(feature = "distributed")]
-            self.distributed_manager
-                .as_ref()
-                .map(|m| m.get_decision_receiver()), // Pass receiver from manager
+            None, // We'll create the receiver when needed
         )
     }
 
