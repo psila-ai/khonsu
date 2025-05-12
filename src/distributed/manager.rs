@@ -170,7 +170,7 @@ impl DistributedCommitManager {
             node_id,
             peer_addrs.clone(),
             grpc_server_receiver,
-            Arc::clone(&runtime),
+            runtime.clone(),
         );
 
         // Create OmniPaxos instance
@@ -193,7 +193,7 @@ impl DistributedCommitManager {
             server_addr,
             grpc_server_sender,
             node_id,
-            Arc::clone(&runtime),
+            runtime.clone(),
         )?;
 
         // Create the Two-Phase Commit manager
