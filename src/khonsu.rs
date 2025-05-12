@@ -151,9 +151,9 @@ impl Khonsu {
                     config.cluster_config,
                     config.peer_addrs,
                     &config.storage_path,
-                    Arc::clone(&txn_buffer),
-                    Arc::clone(&dependency_tracker),
-                    Arc::clone(&storage),
+                    txn_buffer.clone(),
+                    dependency_tracker.clone(),
+                    storage.clone(),
                 )
                 .expect("Failed to create DistributedCommitManager"); // TODO: Handle errors properly
 
@@ -274,11 +274,11 @@ impl Khonsu {
         Transaction::new(
             transaction_id,
             self.default_isolation_level,
-            Arc::clone(&self.txn_buffer), // Pass a clone of the transaction buffer Arc
-            Arc::clone(&self.transaction_counter), // Pass a clone of the transaction counter Arc
-            Arc::clone(&self.storage),    // Pass a clone of the storage Arc
+            self.txn_buffer.clone(),
+            self.transaction_counter.clone(),
+            self.storage.clone(),
             self.default_conflict_resolution,
-            Arc::clone(&self.dependency_tracker), // Pass a clone of the dependency tracker Arc
+            self.dependency_tracker.clone(),
             #[cfg(feature = "distributed")]
             self.distributed_manager
                 .as_ref()
