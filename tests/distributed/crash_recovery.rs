@@ -52,9 +52,9 @@ fn simulate_node_crash(
 fn test_recovery_after_node_crash() {
     // Set up a three-node distributed cluster
     let nodes = setup_distributed_cluster(3);
-    let (khonsu1, temp_dir1) = &nodes[0];
-    let (khonsu2, temp_dir2) = &nodes[1];
-    let (khonsu3, temp_dir3) = &nodes[2];
+    let (khonsu1, _temp_dir1) = &nodes[0];
+    let (khonsu2, _temp_dir2) = &nodes[1];
+    let (khonsu3, _temp_dir3) = &nodes[2];
 
     // Get node IDs and create peer addresses
     let node_ids = vec![1, 2, 3];
@@ -162,10 +162,7 @@ fn test_recovery_after_node_crash() {
     let result1 = wait_for_condition(
         || {
             let mut txn = khonsu1.start_transaction();
-            match txn.read(&key2) {
-                Ok(Some(_)) => true,
-                _ => false,
-            }
+            matches!(txn.read(&key2), Ok(Some(_)))
         },
         5000, // 5 second timeout
     );
@@ -174,10 +171,7 @@ fn test_recovery_after_node_crash() {
     let result3 = wait_for_condition(
         || {
             let mut txn = khonsu3.start_transaction();
-            match txn.read(&key2) {
-                Ok(Some(_)) => true,
-                _ => false,
-            }
+            matches!(txn.read(&key2), Ok(Some(_)))
         },
         5000, // 5 second timeout
     );
@@ -189,8 +183,8 @@ fn test_transaction_during_node_crash() {
     // Set up a three-node distributed cluster
     let nodes = setup_distributed_cluster(3);
     let (khonsu1, _temp_dir1) = &nodes[0];
-    let (khonsu2, temp_dir2) = &nodes[1];
-    let (khonsu3, _temp_dir3) = &nodes[2];
+    let (_khonsu2, _temp_dir2) = &nodes[1];
+    let (_khonsu3, _temp_dir3) = &nodes[2];
 
     // Get node IDs and create peer addresses
     let node_ids = vec![1, 2, 3];
@@ -246,10 +240,7 @@ fn test_transaction_during_node_crash() {
     let result2 = wait_for_condition(
         || {
             let mut txn = khonsu2_new.start_transaction();
-            match txn.read(&key) {
-                Ok(Some(_)) => true,
-                _ => false,
-            }
+            matches!(txn.read(&key), Ok(Some(_)))
         },
         5000, // 5 second timeout
     );
@@ -272,9 +263,9 @@ fn test_transaction_during_node_crash() {
 fn test_multiple_node_crashes() {
     // Set up a three-node distributed cluster
     let nodes = setup_distributed_cluster(3);
-    let (khonsu1, temp_dir1) = &nodes[0];
-    let (khonsu2, temp_dir2) = &nodes[1];
-    let (khonsu3, temp_dir3) = &nodes[2];
+    let (khonsu1, _temp_dir1) = &nodes[0];
+    let (_khonsu2, _temp_dir2) = &nodes[1];
+    let (_khonsu3, _temp_dir3) = &nodes[2];
 
     // Get node IDs and create peer addresses
     let node_ids = vec![1, 2, 3];
@@ -358,10 +349,7 @@ fn test_multiple_node_crashes() {
         let result1 = wait_for_condition(
             || {
                 let mut txn = khonsu.start_transaction();
-                match txn.read(&key) {
-                    Ok(Some(_)) => true,
-                    _ => false,
-                }
+                matches!(txn.read(&key), Ok(Some(_)))
             },
             5000, // 5 second timeout
         );
@@ -371,10 +359,7 @@ fn test_multiple_node_crashes() {
         let result2 = wait_for_condition(
             || {
                 let mut txn = khonsu.start_transaction();
-                match txn.read(&key2) {
-                    Ok(Some(_)) => true,
-                    _ => false,
-                }
+                matches!(txn.read(&key2), Ok(Some(_)))
             },
             5000, // 5 second timeout
         );

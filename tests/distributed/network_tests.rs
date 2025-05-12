@@ -34,10 +34,7 @@ fn test_multi_node_communication() {
     let result2 = wait_for_condition(
         || {
             let mut txn = khonsu2.start_transaction();
-            match txn.read(&key) {
-                Ok(Some(_)) => true,
-                _ => false,
-            }
+            matches!(txn.read(&key), Ok(Some(_)))
         },
         5000, // 5 second timeout
     );
@@ -47,10 +44,7 @@ fn test_multi_node_communication() {
     let result3 = wait_for_condition(
         || {
             let mut txn = khonsu3.start_transaction();
-            match txn.read(&key) {
-                Ok(Some(_)) => true,
-                _ => false,
-            }
+            matches!(txn.read(&key), Ok(Some(_)))
         },
         5000, // 5 second timeout
     );
@@ -218,10 +212,7 @@ fn test_concurrent_writes_from_different_nodes() {
         let result1 = wait_for_condition(
             || {
                 let mut txn = khonsu.start_transaction();
-                match txn.read(&key1) {
-                    Ok(Some(_)) => true,
-                    _ => false,
-                }
+                matches!(txn.read(&key1), Ok(Some(_)))
             },
             5000, // 5 second timeout
         );
@@ -231,10 +222,7 @@ fn test_concurrent_writes_from_different_nodes() {
         let result2 = wait_for_condition(
             || {
                 let mut txn = khonsu.start_transaction();
-                match txn.read(&key2) {
-                    Ok(Some(_)) => true,
-                    _ => false,
-                }
+                matches!(txn.read(&key2), Ok(Some(_)))
             },
             5000, // 5 second timeout
         );
@@ -244,10 +232,7 @@ fn test_concurrent_writes_from_different_nodes() {
         let result3 = wait_for_condition(
             || {
                 let mut txn = khonsu.start_transaction();
-                match txn.read(&key3) {
-                    Ok(Some(_)) => true,
-                    _ => false,
-                }
+                matches!(txn.read(&key3), Ok(Some(_)))
             },
             5000, // 5 second timeout
         );

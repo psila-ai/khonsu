@@ -29,3 +29,6 @@ dtest:
 
 doc:
 	RUSTDOCFLAGS="--cfg docsrs" cargo +nightly doc --no-deps --all-features
+
+fix:
+	__CARGO_FIX_YOLO=1 cargo clippy --all-features --fix --allow-dirty
