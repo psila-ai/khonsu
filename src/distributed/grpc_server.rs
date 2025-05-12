@@ -65,7 +65,9 @@ impl PaxosService for KhonsuOmniPaxosService {
 ///
 /// # Arguments
 ///
-/// * `addr` - The socket address to bind the server to.
+/// * `addr` - The socket address to bind the server to. By convention, this is typically
+///   "0.0.0.0:{port}" where port is 50051 + node_id. For example, node 1 uses port 50052,
+///   node 2 uses port 50053, etc.
 /// * `omni_paxos_sender` - Sender channel to the OmniPaxos event loop thread.
 /// * `node_id` - The ID of the local node.
 /// * `runtime` - The Tokio runtime for async operations.

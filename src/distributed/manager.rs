@@ -188,6 +188,8 @@ impl DistributedCommitManager {
         let transaction_receivers_mutex = Arc::new(parking_lot::Mutex::new(()));
 
         // Start the gRPC server
+        // Port allocation: Each node uses port 50051 + node_id
+        // For example: Node 1 uses port 50052, Node 2 uses port 50053, etc.
         let server_addr: SocketAddr = format!("0.0.0.0:{}", 50051 + node_id).parse()?;
         start_grpc_server(server_addr, grpc_server_sender, node_id, runtime.clone())?;
 

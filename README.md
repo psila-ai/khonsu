@@ -150,8 +150,8 @@ fn main() -> Result<()> {
     
     // Define peer addresses for gRPC communication
     let mut peer_addrs = HashMap::new();
-    peer_addrs.insert(2, "127.0.0.1:50052".to_string());
-    peer_addrs.insert(3, "127.0.0.1:50053".to_string());
+    peer_addrs.insert(2, "127.0.0.1:50053".to_string()); // Node 2 uses port 50053 (50051 + 2)
+    peer_addrs.insert(3, "127.0.0.1:50054".to_string()); // Node 3 uses port 50054 (50051 + 3)
     
     // Create a storage path for the distributed commit log
     let storage_path = PathBuf::from("/tmp/khonsu-node1");
@@ -219,6 +219,28 @@ When operating in distributed mode, Khonsu uses a combination of techniques to e
 2. **Multi-Paxos Consensus**: Provides fault tolerance and consistency for the distributed commit log
 3. **RocksDB Storage**: Persists the commit log for crash recovery
 4. **gRPC Communication**: Enables network communication between nodes
+
+### Network Configuration
+
+Each node in the Khonsu cluster requires a unique node ID and communicates over gRPC. The port allocation follows a simple convention:
+
+- **Base Port**: 50051
+- **Node Port**: 50051 + node_id
+
+For example:
+- Node 1 uses port 50052 (50051 + 1)
+- Node 2 uses port 50053 (50051 + 2)
+- Node 3 uses port 50054 (50051 + 3)
+
+When configuring peer addresses in your distributed setup, you need to specify the full address including the calculated port:
+
+```rust
+let mut peer_addrs = HashMap::new();
+peer_addrs.insert(2, "127.0.0.1:50053".to_string()); // Node 2 uses port 50053
+peer_addrs.insert(3, "127.0.0.1:50054".to_string()); // Node 3 uses port 50054
+```
+
+This deterministic port allocation scheme ensures that each node in the cluster gets a unique port without requiring complex port negotiation.
 
 ### Isolation Levels in Distributed Mode
 
