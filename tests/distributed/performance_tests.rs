@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use khonsu::prelude::*;
 
 use super::test_helpers::*;
 use super::*;

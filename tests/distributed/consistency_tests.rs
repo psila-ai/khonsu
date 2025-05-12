@@ -188,8 +188,8 @@ fn test_read_committed_isolation() {
 
     // Manually replicate data to node 2
     {
-        let k1 = Arc::clone(&khonsu1);
-        let k2 = Arc::clone(&khonsu2);
+        let k1 = Arc::clone(khonsu1);
+        let k2 = Arc::clone(khonsu2);
         manually_replicate_data(k1, k2, &[key.clone()]);
     }
 
@@ -224,8 +224,8 @@ fn test_repeatable_read_isolation() {
 
     // Manually replicate data to node 2
     {
-        let k1 = Arc::clone(&khonsu1);
-        let k2 = Arc::clone(&khonsu2);
+        let k1 = Arc::clone(khonsu1);
+        let k2 = Arc::clone(khonsu2);
         manually_replicate_data(k1, k2, &[key.clone()]);
     }
 
@@ -249,7 +249,7 @@ fn test_repeatable_read_isolation() {
     txn_update.commit().unwrap();
 
     // Manually replicate data to node 2
-    manually_replicate_data(Arc::clone(&khonsu1), Arc::clone(&khonsu2), &[key.clone()]);
+    manually_replicate_data(Arc::clone(khonsu1), Arc::clone(khonsu2), &[key.clone()]);
 
     // Read the value again from the long-running transaction
     // With RepeatableRead, it should still see the old value

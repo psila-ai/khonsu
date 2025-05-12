@@ -3,11 +3,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use khonsu::prelude::*;
 
 use super::test_helpers::*;
 use super::*;
-use rand;
 
 #[test]
 pub fn test_single_node_distributed_transaction() {

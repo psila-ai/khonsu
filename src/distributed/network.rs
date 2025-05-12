@@ -1,6 +1,5 @@
 //! Network communication layer for consensus messages
 
-use bincode;
 use crossbeam_channel as channel;
 use omnipaxos::messages::Message;
 use omnipaxos::util::NodeId;
@@ -9,7 +8,6 @@ use std::sync::Arc;
 use tokio::runtime::Runtime;
 
 use crate::distributed::ReplicatedCommit;
-use crate::distributed::paxos_service::ConsensusMessage;
 
 /// Network implementation for OmniPaxos using gRPC.
 pub struct KhonsuNetwork {
@@ -75,10 +73,7 @@ impl KhonsuNetwork {
     /// Receives a message from another node.
     pub fn receive_message(&mut self) -> Option<Message<ReplicatedCommit>> {
         // Try to receive a message from the channel
-        match self.receiver.try_recv() {
-            Ok(message) => Some(message),
-            Err(_) => None,
-        }
+        self.receiver.try_recv().ok()
     }
 
     /// Takes outgoing messages from the buffer and sends them.
