@@ -341,9 +341,11 @@ fn test_multiple_node_crashes() {
     );
 
     // Verify all nodes have both the original and new data
-    let nodes_to_check = [Arc::clone(khonsu1),
+    let nodes_to_check = [
+        Arc::clone(khonsu1),
         Arc::clone(&khonsu2_new),
-        Arc::clone(&khonsu3_new)];
+        Arc::clone(&khonsu3_new),
+    ];
     for (i, khonsu) in nodes_to_check.iter().enumerate() {
         // Check original data
         let result1 = wait_for_condition(
