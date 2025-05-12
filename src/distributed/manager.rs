@@ -189,12 +189,7 @@ impl DistributedCommitManager {
 
         // Start the gRPC server
         let server_addr: SocketAddr = format!("0.0.0.0:{}", 50051 + node_id).parse()?;
-        start_grpc_server(
-            server_addr,
-            grpc_server_sender,
-            node_id,
-            runtime.clone(),
-        )?;
+        start_grpc_server(server_addr, grpc_server_sender, node_id, runtime.clone())?;
 
         // Create the Two-Phase Commit manager
         let twopc_manager = Arc::new(TwoPhaseCommitManager::new(
