@@ -1,0 +1,111 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Khonsu: A Software Transactional Memory (STM) Library in Rust for Apache Arrow"><title>khonsu - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../static.files/rustdoc-0ce1a80b.css"><script id="default-settings" 
+data-use_system_theme="false"
+data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="../static.files/" data-current-crate="khonsu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (8405332bd 2025-05-12)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../static.files/storage-4e99c027.js"></script><script defer src="../crates.js"></script><script defer src="../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../static.files/favicon-044be391.svg"></head><body class="rustdoc mod crate"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../khonsu/index.html"><img src="https://github.com/psila-ai/khonsu/raw/master/art/khonsu.jpg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../khonsu/index.html"><img src="https://github.com/psila-ai/khonsu/raw/master/art/khonsu.jpg" alt="logo"></a><h2><a href="../khonsu/index.html">khonsu</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#features" title="Features">Features</a></li><li><a href="#architecture-overview" title="Architecture Overview">Architecture Overview</a></li><li><a href="#getting-started" title="Getting Started">Getting Started</a></li><li><a href="#example-usage" title="Example Usage">Example Usage</a></li><li><a href="#constraints-and-considerations" title="Constraints and Considerations">Constraints and Considerations</a></li><li><a href="#references-of-khonsu-implementation" title="References of Khonsu Implementation">References of Khonsu Implementation</a></li></ul><h3><a href="#reexports">Crate Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>khonsu</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/khonsu/lib.rs.html#1-298">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><strong>Khonsu: A Software Transactional Memory (STM) Library in Rust for Apache Arrow</strong></p>
+<p><strong>Khonsu</strong> is a Rust library providing Software Transactional Memory (STM) capabilities.
+It is designed to enable concurrent access to shared mutable data without relying
+on traditional locking mechanisms, aiming for high performance and reduced contention.
+<strong>Khonsu</strong> is built on top of an MVCC system.</p>
+<p>The library integrates with the <a href="https://arrow.apache.org/">Apache Arrow</a> data format for efficient handling
+of tabular data (RecordBatches) within transactions. It supports row-level
+operations (create, update, delete) and provides configurable transaction
+isolation levels and conflict resolution strategies.</p>
+<h3 id="features"><a class="doc-anchor" href="#features">§</a>Features</h3>
+<ul>
+<li><strong>Software Transactional Memory:</strong> Manage concurrent access to shared data using transactions.</li>
+<li><strong>Arrow Integration:</strong> Work with data represented as Arrow RecordBatches.</li>
+<li><strong>Row-Level Operations:</strong> Perform create, update, and delete operations on data within transactions.</li>
+<li><strong>Multiple RecordBatches per Transaction:</strong> Handle complex transactions involving multiple data sets.</li>
+<li><strong>Conflict Detection:</strong> Identify conflicts during the transaction commit phase.</li>
+<li><strong>Conflict Resolution Strategies:</strong> Configure how conflicts are handled (append, ignore, replace, fail).</li>
+<li><strong>Transaction Rollback:</strong> Ensure atomicity with complete rollback on transaction abort.</li>
+<li><strong>Configurable Isolation Levels:</strong> Support Read Committed, Repeatable Read, and Serializable isolation.</li>
+<li><strong>Serializable Snapshot Isolation (SSI):</strong> Implementation of SSI for the Serializable isolation level.</li>
+<li><strong>Distributed Extensible Design:</strong> Designed with support for distributed commit in mind.
+<ul>
+<li>In distributed mode, Read Committed isolation is fully supported</li>
+<li>Repeatable Read and Serializable isolation have limitations in distributed settings</li>
+</ul>
+</li>
+</ul>
+<h3 id="architecture-overview"><a class="doc-anchor" href="#architecture-overview">§</a>Architecture Overview</h3>
+<p>The core components of <strong>Khonsu</strong> include:</p>
+<ul>
+<li><a href="khonsu/struct.Khonsu.html" title="struct khonsu::khonsu::Khonsu"><code>Khonsu</code></a>: The main entry point for the STM system, responsible for starting transactions.</li>
+<li><a href="transaction/struct.Transaction.html" title="struct khonsu::transaction::Transaction"><code>Transaction</code></a>: Represents an ongoing unit of work, managing its read and write sets.</li>
+<li><a href="data_store/txn_buffer/struct.TxnBuffer.html" title="struct khonsu::data_store::txn_buffer::TxnBuffer"><code>TxnBuffer</code></a>: The in-memory buffer holding the current state of the data.</li>
+<li><a href="data_store/versioned_value/struct.VersionedValue.html" title="struct khonsu::data_store::versioned_value::VersionedValue"><code>VersionedValue</code></a>: Wraps data items with version information for concurrency control.</li>
+<li><strong>DependencyTracker</strong>: Tracks transaction dependencies for SSI validation.</li>
+<li><strong>Conflict Detection and Resolution</strong> modules: Handle identifying and resolving transaction conflicts.</li>
+<li><a href="storage/trait.Storage.html" title="trait khonsu::storage::Storage"><code>Storage</code></a>: A trait for interacting with durable storage.</li>
+</ul>
+<h3 id="getting-started"><a class="doc-anchor" href="#getting-started">§</a>Getting Started</h3>
+<p>To use <strong>Khonsu</strong>, add it as a dependency to your <code>Cargo.toml</code>:</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+khonsu = { git = &quot;https://github.com/psila-ai/khonsu.git&quot; }</code></pre></div><h3 id="example-usage"><a class="doc-anchor" href="#example-usage">§</a>Example Usage</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>khonsu::prelude::<span class="kw-2">*</span>;
+<span class="kw">use </span>std::sync::Arc;
+<span class="kw">use </span>arrow::record_batch::RecordBatch;
+<span class="kw">use </span>arrow::array::{Int32Array, StringArray};
+<span class="kw">use </span>arrow::datatypes::{Schema, Field, DataType};
+<span class="kw">use </span>ahash::AHashMap <span class="kw">as </span>HashMap;
+
+<span class="comment">// Define a mock storage for demonstration
+</span><span class="attr">#[derive(Default)]
+</span><span class="kw">struct </span>MockStorage {
+    data: HashMap&lt;String, RecordBatch&gt;,
+}
+
+<span class="kw">impl </span>Storage <span class="kw">for </span>MockStorage {
+    <span class="kw">fn </span>apply_mutations(<span class="kw-2">&amp;</span><span class="self">self</span>, mutations: Vec&lt;StorageMutation&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+        <span class="comment">// In a real implementation, this would write to durable storage.
+        // For this mock, we do nothing.
+        </span><span class="prelude-val">Ok</span>(())
+    }
+}
+
+<span class="comment">// Create a Khonsu instance
+</span><span class="kw">let </span>storage = Arc::new(MockStorage::default());
+<span class="kw">let </span>isolation = TransactionIsolation::Serializable;
+<span class="kw">let </span>resolution = ConflictResolution::Fail;
+<span class="kw">let </span>khonsu = Khonsu::new(storage, isolation, resolution);
+<span class="kw">let </span>khonsu = Khonsu::new(storage.clone(), isolation, resolution, <span class="prelude-val">None</span>);
+
+<span class="comment">// Start a transaction
+</span><span class="kw">let </span><span class="kw-2">mut </span>transaction = khonsu.start_transaction();
+
+<span class="comment">// Prepare some data as an Arrow RecordBatch
+</span><span class="kw">let </span>schema = Arc::new(Schema::new(<span class="macro">vec!</span>[
+    Field::new(<span class="string">"id"</span>, DataType::Int32, <span class="bool-val">false</span>),
+    Field::new(<span class="string">"name"</span>, DataType::Utf8, <span class="bool-val">false</span>),
+]));
+<span class="kw">let </span>id_array = Int32Array::from(<span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>]);
+<span class="kw">let </span>name_array = StringArray::from(<span class="macro">vec!</span>[<span class="string">"Alice"</span>, <span class="string">"Bob"</span>]);
+<span class="kw">let </span>record_batch = RecordBatch::try_new(
+    schema,
+    <span class="macro">vec!</span>[Arc::new(id_array), Arc::new(name_array)],
+).unwrap();
+
+<span class="comment">// Perform a write operation within the transaction
+</span><span class="kw">let </span>key = <span class="string">"users"</span>.to_string();
+transaction.write(key.clone(), record_batch).unwrap();
+
+<span class="comment">// Attempt to commit the transaction
+</span><span class="kw">match </span>transaction.commit() {
+    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; {
+        <span class="macro">println!</span>(<span class="string">"Transaction committed successfully."</span>);
+    }
+    <span class="prelude-val">Err</span>(KhonsuError::TransactionConflict) =&gt; {
+        <span class="macro">eprintln!</span>(<span class="string">"Transaction failed due to conflict."</span>);
+    }
+    <span class="prelude-val">Err</span>(e) =&gt; {
+        <span class="macro">eprintln!</span>(<span class="string">"Error during transaction: {}"</span>, e);
+    }
+}</code></pre></div>
+<h3 id="constraints-and-considerations"><a class="doc-anchor" href="#constraints-and-considerations">§</a>Constraints and Considerations</h3>
+<ul>
+<li>Goal is lock-free internals, Atomic operations are used where applicable.</li>
+<li>Memory allocation is minimized, especially in performance-critical paths.</li>
+</ul>
+<h3 id="references-of-khonsu-implementation"><a class="doc-anchor" href="#references-of-khonsu-implementation">§</a>References of Khonsu Implementation</h3>
+<p>Research papers that inspired Khonsu are in our <code>README.md</code>.</p>
+</div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.ConflictResolution"><code>pub use conflict::resolution::<a class="enum" href="conflict/resolution/enum.ConflictResolution.html" title="enum khonsu::conflict::resolution::ConflictResolution">ConflictResolution</a>;</code></dt><dt id="reexport.TxnBuffer"><code>pub use data_store::txn_buffer::<a class="struct" href="data_store/txn_buffer/struct.TxnBuffer.html" title="struct khonsu::data_store::txn_buffer::TxnBuffer">TxnBuffer</a>;</code></dt><dt id="reexport.VersionedValue"><code>pub use data_store::versioned_value::<a class="struct" href="data_store/versioned_value/struct.VersionedValue.html" title="struct khonsu::data_store::versioned_value::VersionedValue">VersionedValue</a>;</code></dt><dt id="reexport.DataItem"><code>pub use dependency_tracking::<a class="struct" href="dependency_tracking/struct.DataItem.html" title="struct khonsu::dependency_tracking::DataItem">DataItem</a>;</code></dt><dt id="reexport.KhonsuError"><code>pub use errors::<a class="enum" href="errors/enum.KhonsuError.html" title="enum khonsu::errors::KhonsuError">KhonsuError</a>;</code></dt><dt id="reexport.Result"><code>pub use errors::<a class="type" href="errors/type.Result.html" title="type khonsu::errors::Result">Result</a>;</code></dt><dt id="reexport.TransactionIsolation"><code>pub use isolation::<a class="enum" href="isolation/enum.TransactionIsolation.html" title="enum khonsu::isolation::TransactionIsolation">TransactionIsolation</a>;</code></dt><dt id="reexport.Khonsu"><code>pub use khonsu::<a class="struct" href="khonsu/struct.Khonsu.html" title="struct khonsu::khonsu::Khonsu">Khonsu</a>;</code></dt><dt id="reexport.Transaction"><code>pub use transaction::<a class="struct" href="transaction/struct.Transaction.html" title="struct khonsu::transaction::Transaction">Transaction</a>;</code></dt><dt><code>pub use conflict::<a class="mod" href="conflict/detection/index.html" title="mod khonsu::conflict::detection">detection</a>::*;</code></dt><dt><code>pub use <a class="mod" href="storage/index.html" title="mod khonsu::storage">storage</a>::*;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="arrow_utils/index.html" title="mod khonsu::arrow_utils">arrow_<wbr>utils</a></dt><dd>Arrow in-mem data management utilities.</dd><dt><a class="mod" href="conflict/index.html" title="mod khonsu::conflict">conflict</a></dt><dd>Conflict resolution system.</dd><dt><a class="mod" href="data_store/index.html" title="mod khonsu::data_store">data_<wbr>store</a></dt><dd>Transactional variable storage layer.</dd><dt><a class="mod" href="dependency_tracking/index.html" title="mod khonsu::dependency_tracking">dependency_<wbr>tracking</a></dt><dd>Inter/Intra data dependency tracking</dd><dt><a class="mod" href="distributed/index.html" title="mod khonsu::distributed">distributed</a><wbr><span class="stab portability" title="Available on crate feature `distributed` only"><code>distributed</code></span></dt><dd>2PC Mechanism &amp; Distributed Commit Integration</dd><dt><a class="mod" href="errors/index.html" title="mod khonsu::errors">errors</a></dt><dd>Khonsu Errors</dd><dt><a class="mod" href="isolation/index.html" title="mod khonsu::isolation">isolation</a></dt><dd>Isolation Level definitions</dd><dt><a class="mod" href="khonsu/index.html" title="mod khonsu::khonsu">khonsu</a></dt><dd>Khonsu - Transaction Management System</dd><dt><a class="mod" href="prelude/index.html" title="mod khonsu::prelude">prelude</a></dt><dd>Prelude of the Khonsu.</dd><dt><a class="mod" href="storage/index.html" title="mod khonsu::storage">storage</a></dt><dd>Storage agnostic pluggable commit mechanism</dd><dt><a class="mod" href="transaction/index.html" title="mod khonsu::transaction">transaction</a></dt><dd>Base transaction system</dd></dl><script type="text/json" id="notable-traits-data">{"&'a mut [u8]":"<h3>Notable traits for <code>&amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for &amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</div>","&[u8]":"<h3>Notable traits for <code>&amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/std/io/trait.Read.html\" title=\"trait std::io::Read\">Read</a> for &amp;[<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</div>","&mut [u8]":"<h3>Notable traits for <code>&amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</code></h3><pre><code><div class=\"where\">impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for &amp;mut [<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>]</div>","Vec<u8>":"<h3>Notable traits for <code><a class=\"struct\" href=\"https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>, A&gt;</code></h3><pre><code><div class=\"where\">impl&lt;A&gt; <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/std/io/trait.Write.html\" title=\"trait std::io::Write\">Write</a> for <a class=\"struct\" href=\"https://doc.rust-lang.org/nightly/alloc/vec/struct.Vec.html\" title=\"struct alloc::vec::Vec\">Vec</a>&lt;<a class=\"primitive\" href=\"https://doc.rust-lang.org/nightly/std/primitive.u8.html\">u8</a>, A&gt;<div class=\"where\">where\n    A: <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/alloc/trait.Allocator.html\" title=\"trait core::alloc::Allocator\">Allocator</a>,</div></div>"}</script></section></div></main></body></html>

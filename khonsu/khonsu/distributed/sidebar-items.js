@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TransactionState"],"mod":["channel_ext","dist_config","grpc_server","manager","network","paxos_service","prelude","storage","twopc"],"struct":["GlobalTransactionId","ReplicatedCommit","ReplicatedCommitSnapshot","SerializableVersionedValue"]};

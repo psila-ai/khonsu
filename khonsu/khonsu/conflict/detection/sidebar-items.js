@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ConflictType"],"fn":["detect_conflicts"]};

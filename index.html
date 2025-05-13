@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khonsu - Software Transactional Memory for Rust</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+    <style>
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-20px);
+            }
+        }
+
+        @keyframes glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(251, 191, 36, 0.5);
+            }
+
+            50% {
+                box-shadow: 0 0 40px rgba(251, 191, 36, 0.8);
+            }
+        }
+
+        @keyframes twinkle {
+
+            0%,
+            100% {
+                opacity: 0.3;
+            }
+
+            50% {
+                opacity: 1;
+            }
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle var(--duration) ease-in-out infinite;
+            animation-delay: var(--delay);
+        }
+
+        /* Custom gradient for sunset/sunrise effect */
+        .sky-gradient {
+            background: linear-gradient(to bottom,
+                    #1e3a8a 0%,
+                    #312e81 25%,
+                    #6d28d9 50%,
+                    #c026d3 70%,
+                    #f97316 85%,
+                    #fbbf24 100%);
+            position: fixed;
+            inset: 0;
+            opacity: 0.15;
+            animation: skyTransition 20s ease-in-out infinite;
+        }
+
+        @keyframes skyTransition {
+
+            0%,
+            100% {
+                opacity: 0.15;
+            }
+
+            50% {
+                opacity: 0.25;
+            }
+        }
+
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .glow-animation {
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        /* Documentation button glow */
+        .documentation-glow {
+            animation: documentationGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes holographicShift {
+
+            0%,
+            100% {
+                filter: hue-rotate(0deg) brightness(1.2);
+            }
+
+            50% {
+                filter: hue-rotate(180deg) brightness(1.5);
+            }
+        }
+
+        @keyframes documentationGlow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(59, 130, 246, 0.5),
+                    0 0 40px rgba(139, 92, 246, 0.3),
+                    0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+
+            50% {
+                box-shadow: 0 0 30px rgba(59, 130, 246, 0.8),
+                    0 0 60px rgba(139, 92, 246, 0.5),
+                    0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+        }
+
+        /* Syntax highlighting improvements */
+        pre {
+            background-color: #1e293b !important;
+            border: 1px solid #334155;
+        }
+
+        code {
+            font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const LandingPage = () => {
+            const [activeTab, setActiveTab] = useState('basic');
+            const [scrollY, setScrollY] = useState(0);
+            const [moonPhaseIndex, setMoonPhaseIndex] = useState(0);
+            const [stars, setStars] = useState([]);
+            const [copiedCode, setCopiedCode] = useState(null);
+
+            // Handler functions
+            const handleTabChange = (tab) => {
+                console.log('Changing tab to:', tab);
+                setActiveTab(tab);
+            };
+
+            const handleCopy = (code, id) => {
+                navigator.clipboard.writeText(code);
+                setCopiedCode(id);
+                setTimeout(() => setCopiedCode(null), 2000);
+            };
+
+            useEffect(() => {
+                const handleScroll = () => setScrollY(window.scrollY);
+                window.addEventListener('scroll', handleScroll);
+
+                // Generate random stars
+                const starArray = [];
+                for (let i = 0; i < 50; i++) {
+                    starArray.push({
+                        id: i,
+                        left: Math.random() * 100 + '%',
+                        top: Math.random() * 100 + '%',
+                        delay: Math.random() * 5 + 's',
+                        duration: (Math.random() * 3 + 2) + 's'
+                    });
+                }
+                setStars(starArray);
+
+                // Animate moon phases
+                const phaseInterval = setInterval(() => {
+                    setMoonPhaseIndex(prev => (prev + 1) % 8);
+                }, 2000);
+
+                return () => {
+                    window.removeEventListener('scroll', handleScroll);
+                    clearInterval(phaseInterval);
+                };
+            }, []);
+
+            useEffect(() => {
+                // Re-run Prism syntax highlighting when activeTab changes
+                if (typeof Prism !== 'undefined') {
+                    Prism.highlightAll();
+                }
+            }, [activeTab]);
+
+            const moonPhases = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'];
+
+            const basicExample = `use khonsu::prelude::*;
+use std::sync::Arc;
+use arrow::array::{Int64Array, StringArray};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+
+fn main() -> Result<()> {
+    // Set up Khonsu with a storage implementation
+    let storage = Arc::new(MockStorage::default());
+    let khonsu = Khonsu::new(
+        storage,
+        TransactionIsolation::Serializable,
+        ConflictResolution::Fail,
+    );
+
+    // Define schema and create record batch
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("id", DataType::Utf8, false),
+        Field::new("value", DataType::Int64, false),
+    ]));
+    let id_array = Arc::new(StringArray::from(vec!["key1"]));
+    let value_array = Arc::new(Int64Array::from(vec![100]));
+    let record_batch = 
+        RecordBatch::try_new(schema, vec![id_array, value_array])?;
+
+    // Start a transaction
+    let mut txn = khonsu.start_transaction();
+
+    // Write data
+    txn.write("my_data_key".to_string(), record_batch.clone())?;
+
+    // Commit the transaction
+    match txn.commit() {
+        Ok(()) => println!("Transaction committed successfully."),
+        Err(e) => eprintln!("Transaction failed: {:?}", e),
+    }
+
+    Ok(())
+}`;
+
+            const distributedExample = `use khonsu::prelude::*;
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+fn main() -> Result<()> {
+    // Configure distributed Khonsu node
+    let node_id = 1;
+    let cluster_config = ClusterConfig {
+        configuration_id: 1,
+        nodes: vec![1, 2, 3], // 3-node cluster
+        flexible_quorum: None,
+    };
+    
+    // Set up peer addresses
+    let mut peer_addrs = HashMap::new();
+    peer_addrs.insert(2, "127.0.0.1:50053".to_string());
+    peer_addrs.insert(3, "127.0.0.1:50054".to_string());
+    
+    // Create distributed configuration
+    let dist_config = KhonsuDistConfig {
+        node_id,
+        cluster_config,
+        peer_addrs,
+        storage_path: PathBuf::from("/tmp/khonsu-node1"),
+    };
+    
+    // Initialize Khonsu with distributed support
+    let storage = Arc::new(MockStorage::default());
+    let khonsu = Khonsu::new(
+        storage,
+        TransactionIsolation::ReadCommitted,
+        ConflictResolution::Fail,
+        Some(dist_config),
+    );
+    
+    // Start a distributed transaction
+    let mut txn = khonsu.start_transaction();
+    
+    // Write data (will be replicated to all nodes)
+    txn.write("distributed_key".to_string(), record_batch)?;
+    
+    // Commit - replicated across the cluster
+    match txn.commit() {
+        Ok(()) => println!("Transaction replicated to all nodes"),
+        Err(e) => eprintln!("Distributed commit failed: {:?}", e),
+    }
+    
+    Ok(())
+}`;
+
+            return (
+                <div className="min-h-screen bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900 text-white relative overflow-hidden">
+                    {/* Animated sky gradient */}
+                    <div className="sky-gradient"></div>
+
+                    {/* Animated stars */}
+                    <div className="fixed inset-0 overflow-hidden pointer-events-none">
+                        {stars.map(star => (
+                            <div
+                                key={star.id}
+                                className="star"
+                                style={{
+                                    left: star.left,
+                                    top: star.top,
+                                    '--delay': star.delay,
+                                    '--duration': star.duration
+                                }}
+                            ></div>
+                        ))}
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="fixed top-0 w-full bg-slate-900/80 backdrop-blur-lg z-50 border-b border-slate-800">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between items-center py-4">
+                                <div className="flex items-center space-x-2">
+                                    <i className="fas fa-moon text-amber-400 text-3xl"></i>
+                                    <span className="text-2xl font-bold bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">Khonsu</span>
+                                </div>
+                                <div className="flex items-center space-x-6">
+                                    <a href="#features" className="hover:text-amber-400 transition-colors">Features</a>
+                                    <a href="#installation" className="hover:text-amber-400 transition-colors">Installation</a>
+                                    <a href="#examples" className="hover:text-amber-400 transition-colors">Examples</a>
+                                    <a href="https://github.com/psila-ai/khonsu" className="hover:text-amber-400 transition-colors">
+                                        <i className="fab fa-github text-xl"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* Hero Section with animated moon phases */}
+                    <section className="relative pt-24 pb-32 px-4 overflow-hidden">
+                        <div className="max-w-7xl mx-auto text-center relative z-10">
+                            <div className="relative w-[500px] h-[500px] mx-auto mb-8">
+                                {/* Constellation lines */}
+                                <svg className="absolute inset-0" viewBox="0 0 500 500">
+                                    <defs>
+                                        <linearGradient id="constellation-gradient">
+                                            <stop offset="0%" stopColor="#FED7AA" stopOpacity="0.2" />
+                                            <stop offset="100%" stopColor="#DBEAFE" stopOpacity="0.2" />
+                                        </linearGradient>
+                                    </defs>
+                                    {/* Draw constellation lines connecting moon phases */}
+                                    {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => {
+                                        const angle1 = (index * 45 - 90) * Math.PI / 180;
+                                        const angle2 = ((index + 1) % 8 * 45 - 90) * Math.PI / 180;
+                                        const x1 = 250 + 160 * Math.cos(angle1);
+                                        const y1 = 250 + 160 * Math.sin(angle1);
+                                        const x2 = 250 + 160 * Math.cos(angle2);
+                                        const y2 = 250 + 160 * Math.sin(angle2);
+                                        return (
+                                            <line
+                                                key={index}
+                                                x1={x1} y1={y1}
+                                                x2={x2} y2={y2}
+                                                stroke="url(#constellation-gradient)"
+                                                strokeWidth="2"
+                                                opacity={index === moonPhaseIndex ? 1 : 0.3}
+                                                style={{ transition: 'opacity 0.5s' }}
+                                            />
+                                        );
+                                    })}
+                                </svg>
+
+                                {/* Center Khonsu logo */}
+                                <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full overflow-hidden border-4 border-amber-400/50 bg-slate-900/90 shadow-2xl">
+                                    <img
+                                        src="https://github.com/psila-ai/khonsu/raw/master/art/khonsu.jpg"
+                                        alt="Khonsu"
+                                        className="w-full h-full object-cover"
+                                    />
+                                </div>
+
+                                {/* Orbiting moon phases */}
+                                {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => (
+                                    <div
+                                        key={index}
+                                        className="absolute w-16 h-16 flex items-center justify-center"
+                                        style={{
+                                            top: '50%',
+                                            left: '50%',
+                                            transform: `translate(-50%, -50%) rotate(${index * 45}deg) translateY(-160px) rotate(-${index * 45}deg)`,
+                                        }}
+                                    >
+                                        <div className={`text-4xl transition-all duration-500 ${index === moonPhaseIndex ? 'scale-150 text-amber-400' : 'scale-100'}`}>
+                                            {moonPhases[index]}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-amber-400 via-blue-400 to-purple-400 bg-clip-text text-transparent animate-pulse">
+                                Khonsu
+                            </h1>
+
+                            <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-3xl mx-auto">
+                                A high-performance Software Transactional Memory (STM) library for Rust, designed for concurrent data access
+                                and manipulation using Apache Arrow RecordBatches
+                            </p>
+
+                            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                <a
+                                    href="#installation"
+                                    className="inline-flex items-center px-6 py-3 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-lg transition-all transform hover:scale-105 hover:rotate-1"
+                                >
+                                    Get Started <i className="fas fa-chevron-right ml-2"></i>
+                                </a>
+                                <a
+                                    href="./khonsu/khonsu/index.html"
+                                    className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-lg transition-all transform hover:scale-105 documentation-glow shadow-lg"
+                                >
+                                    <i className="fas fa-book mr-2"></i> Documentation
+                                </a>
+                                <a
+                                    href="https://github.com/psila-ai/khonsu"
+                                    className="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105 hover:-rotate-1"
+                                >
+                                    View on GitHub <i className="fab fa-github ml-2"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Features Section with animations */}
+                    <section id="features" className="py-20 px-4">
+                        <div className="max-w-7xl mx-auto">
+                            <h2 className="text-4xl font-bold text-center mb-16 bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">
+                                Key Features
+                            </h2>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                <FeatureCard
+                                    icon="fas fa-lock"
+                                    iconColor="text-amber-400"
+                                    title="Lock-free Internals"
+                                    description="Optimized for high performance with lock-free data structures where possible"
+                                    delay="0s"
+                                />
+                                <FeatureCard
+                                    icon="fas fa-database"
+                                    iconColor="text-blue-400"
+                                    title="Arrow Integration"
+                                    description="Seamless integration with Apache Arrow RecordBatches for efficient tabular data handling"
+                                    delay="0.1s"
+                                />
+                                <FeatureCard
+                                    icon="fas fa-globe"
+                                    iconColor="text-purple-400"
+                                    title="Distributed Support"
+                                    description="Built-in distributed transaction capabilities with Two-Phase Commit and Multi-Paxos consensus"
+                                    delay="0.2s"
+                                />
+                                <FeatureCard
+                                    icon="fas fa-code-branch"
+                                    iconColor="text-green-400"
+                                    title="Isolation Levels"
+                                    description="Configurable transaction isolation levels: Read Committed, Repeatable Read, and Serializable"
+                                    delay="0.3s"
+                                />
+                                <FeatureCard
+                                    icon="fas fa-bolt"
+                                    iconColor="text-yellow-400"
+                                    title="Conflict Resolution"
+                                    description="Pluggable conflict resolution strategies: Fail, Ignore, Replace, and Append"
+                                    delay="0.4s"
+                                />
+                                <FeatureCard
+                                    icon="fas fa-code"
+                                    iconColor="text-red-400"
+                                    title="Row-level Operations"
+                                    description="Support for atomic commit, rollback, and row-level operations within transactions"
+                                    delay="0.5s"
+                                />
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Installation Section */}
+                    <section id="installation" className="py-20 px-4 bg-slate-800/30">
+                        <div className="max-w-7xl mx-auto">
+                            <h2 className="text-4xl font-bold text-center mb-16 bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">
+                                Installation
+                            </h2>
+
+                            <div className="max-w-3xl mx-auto">
+                                <div className="bg-slate-900 rounded-lg p-6 border border-slate-700">
+                                    <h3 className="text-xl font-semibold mb-4 text-amber-400">Add to your Cargo.toml:</h3>
+
+                                    <div className="space-y-4">
+                                        <div className="relative">
+                                            <p className="text-gray-400 mb-2"># Basic usage (without distributed features)</p>
+                                            <div className="relative">
+                                                <pre className="bg-slate-950 p-4 rounded overflow-x-auto">
+                                                    <code className="language-toml">{`[dependencies]
+khonsu = { git = "https://github.com/psila-ai/khonsu.git" }`}</code>
+                                                </pre>
+                                                <button
+                                                    onClick={() => handleCopy('[dependencies]\nkhonsu = { git = "https://github.com/psila-ai/khonsu.git" }', 'basic-cargo')}
+                                                    className="absolute top-2 right-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-all"
+                                                >
+                                                    {copiedCode === 'basic-cargo' ? 'Copied!' : 'Copy'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="relative">
+                                            <p className="text-gray-400 mb-2"># With distributed features enabled</p>
+                                            <div className="relative">
+                                                <pre className="bg-slate-950 p-4 rounded overflow-x-auto">
+                                                    <code className="language-toml">{`[dependencies]
+khonsu = { git = "https://github.com/psila-ai/khonsu.git", features = ["distributed"] }`}</code>
+                                                </pre>
+                                                <button
+                                                    onClick={() => handleCopy('[dependencies]\nkhonsu = { git = "https://github.com/psila-ai/khonsu.git", features = ["distributed"] }', 'dist-cargo')}
+                                                    className="absolute top-2 right-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-all"
+                                                >
+                                                    {copiedCode === 'dist-cargo' ? 'Copied!' : 'Copy'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Examples Section with proper syntax highlighting */}
+                    <section id="examples" className="py-20 px-4">
+                        <div className="max-w-7xl mx-auto">
+                            <h2 className="text-4xl font-bold text-center mb-16 bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">
+                                Quick Examples
+                            </h2>
+
+                            <div className="max-w-5xl mx-auto">
+                                <div className="mb-8">
+                                    <div className="flex space-x-4 mb-6 relative z-10">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleTabChange('basic')}
+                                            className={`px-6 py-2 rounded-lg font-semibold transition-all cursor-pointer ${activeTab === 'basic'
+                                                ? 'bg-amber-500 text-black'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                                }`}
+                                        >
+                                            Basic Example
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleTabChange('distributed')}
+                                            className={`px-6 py-2 rounded-lg font-semibold transition-all cursor-pointer ${activeTab === 'distributed'
+                                                ? 'bg-amber-500 text-black'
+                                                : 'bg-slate-800 text-gray-300 hover:bg-slate-700'
+                                                }`}
+                                        >
+                                            Distributed Example
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-slate-900 rounded-lg p-6 border border-slate-700 relative">
+                                        <pre className="overflow-x-auto">
+                                            <code className="language-rust">
+                                                {activeTab === 'basic' ? basicExample : distributedExample}
+                                            </code>
+                                        </pre>
+                                        <button
+                                            onClick={() => handleCopy(activeTab === 'basic' ? basicExample : distributedExample, `${activeTab}-example`)}
+                                            className="absolute top-2 right-2 px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-all"
+                                        >
+                                            {copiedCode === `${activeTab}-example` ? 'Copied!' : 'Copy'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Architecture Section with animations */}
+                    <section className="py-20 px-4 bg-slate-800/30">
+                        <div className="max-w-7xl mx-auto">
+                            <h2 className="text-4xl font-bold text-center mb-16 bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">
+                                Architecture
+                            </h2>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+                                <div className="bg-slate-900 rounded-lg p-6 border border-slate-700 transform transition-all hover:scale-105 hover:border-amber-400/50">
+                                    <h3 className="text-2xl font-semibold mb-4 text-amber-400">Core Components</h3>
+                                    <ul className="space-y-3 text-gray-300">
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-amber-400 mt-1 mr-3"></i>
+                                            <span><strong>Khonsu:</strong> Main entry point for the STM system</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-amber-400 mt-1 mr-3"></i>
+                                            <span><strong>Transaction:</strong> Manages read and write sets</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-amber-400 mt-1 mr-3"></i>
+                                            <span><strong>TxnBuffer:</strong> In-memory buffer for data state</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-amber-400 mt-1 mr-3"></i>
+                                            <span><strong>VersionedValue:</strong> Version control for concurrency</span>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div className="bg-slate-900 rounded-lg p-6 border border-slate-700 transform transition-all hover:scale-105 hover:border-blue-400/50">
+                                    <h3 className="text-2xl font-semibold mb-4 text-blue-400">Distributed Features</h3>
+                                    <ul className="space-y-3 text-gray-300">
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-blue-400 mt-1 mr-3"></i>
+                                            <span><strong>Two-Phase Commit:</strong> Ensures atomicity across nodes</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-blue-400 mt-1 mr-3"></i>
+                                            <span><strong>Multi-Paxos:</strong> Consensus for fault tolerance</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-blue-400 mt-1 mr-3"></i>
+                                            <span><strong>RocksDB Storage:</strong> Persistent commit log</span>
+                                        </li>
+                                        <li className="flex items-start transform transition-all hover:translate-x-2">
+                                            <i className="fas fa-chevron-right text-blue-400 mt-1 mr-3"></i>
+                                            <span><strong>gRPC Communication:</strong> Inter-node messaging</span>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* References Section */}
+                    <section className="py-20 px-4">
+                        <div className="max-w-7xl mx-auto text-center">
+                            <h2 className="text-4xl font-bold mb-8 bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">
+                                Research & References
+                            </h2>
+
+                            <p className="text-xl text-gray-300 mb-12 max-w-3xl mx-auto">
+                                Khonsu is inspired by cutting-edge research in Software Transactional Memory and distributed systems
+                            </p>
+
+                            <div className="flex flex-col sm:flex-row gap-6 justify-center">
+                                <a
+                                    href="./khonsu/khonsu/index.html"
+                                    className="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105"
+                                >
+                                    <i className="fas fa-book mr-2"></i>
+                                    Documentation
+                                </a>
+                                <a
+                                    href="https://github.com/psila-ai/khonsu/blob/master/README.md#references-of-khonsu-implementation"
+                                    className="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 font-semibold rounded-lg transition-all transform hover:scale-105"
+                                >
+                                    <i className="fas fa-book mr-2"></i>
+                                    Research Papers
+                                </a>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Footer */}
+                    <footer className="py-12 px-4 border-t border-slate-800">
+                        <div className="max-w-7xl mx-auto text-center">
+                            <div className="flex items-center justify-center space-x-2 mb-4">
+                                <i className="fas fa-moon text-amber-400 text-xl float-animation"></i>
+                                <span className="text-xl font-bold bg-gradient-to-r from-amber-400 to-blue-400 bg-clip-text text-transparent">Khonsu</span>
+                            </div>
+                            <p className="text-gray-400">
+                                All rights reserved. Built with 🦀 Rust and ❤️ by the Psila.AI team.
+                            </p>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const FeatureCard = ({ icon, iconColor, title, description, delay }) => {
+            return (
+                <div
+                    className="bg-slate-900/50 rounded-lg p-6 border border-slate-700 hover:border-amber-400/50 transition-all transform hover:scale-105 hover:rotate-1"
+                    style={{ animationDelay: delay }}
+                >
+                    <div className="mb-4 transform transition-all hover:scale-110">
+                        <i className={`${icon} text-5xl ${iconColor}`}></i>
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">{title}</h3>
+                    <p className="text-gray-400">{description}</p>
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.createRoot(document.getElementById('root')).render(<LandingPage />);
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["khonsu",[["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"khonsu/data_store/txn_buffer/struct.TxnBuffer.html\" title=\"struct khonsu::data_store::txn_buffer::TxnBuffer\">TxnBuffer</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"khonsu/dependency_tracking/struct.DependencyTracker.html\" title=\"struct khonsu::dependency_tracking::DependencyTracker\">DependencyTracker</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"khonsu/distributed/paxos_service/struct.ConsensusMessage.html\" title=\"struct khonsu::distributed::paxos_service::ConsensusMessage\">ConsensusMessage</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"khonsu/distributed/paxos_service/struct.ReplicatedCommitMessage.html\" title=\"struct khonsu::distributed::paxos_service::ReplicatedCommitMessage\">ReplicatedCommitMessage</a>"],["impl <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/default/trait.Default.html\" title=\"trait core::default::Default\">Default</a> for <a class=\"struct\" href=\"khonsu/distributed/paxos_service/struct.SendMessageResponse.html\" title=\"struct khonsu::distributed::paxos_service::SendMessageResponse\">SendMessageResponse</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[1703]}

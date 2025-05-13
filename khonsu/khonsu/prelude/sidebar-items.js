@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["READ_ERROR_MSG","WRITE_ERROR_MSG"],"derive":["Entry","UniCacheEntry"],"enum":["LogEntry"],"struct":["ClusterConfig","FlexibleQuorum","LogSync","SequenceNumber","SnapshottedEntry"],"type":["ConfigurationId","NodeId","TrimmedIndex"]};

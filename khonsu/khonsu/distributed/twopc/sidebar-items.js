@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["ParticipantState","TwoPhaseCommitPhase"],"struct":["Participant","TwoPhaseCommitManager","TwoPhaseCommitTransaction"]};

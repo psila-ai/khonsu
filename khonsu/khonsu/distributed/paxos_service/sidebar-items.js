@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["paxos_service_client","paxos_service_server"],"struct":["ConsensusMessage","ReplicatedCommitMessage","SendMessageResponse"]};

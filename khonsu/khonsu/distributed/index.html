@@ -1,0 +1,102 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="2PC Mechanism &#38; Distributed Commit Integration"><title>khonsu::distributed - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2" crossorigin href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-0ce1a80b.css"><script id="default-settings" 
+data-use_system_theme="false"
+data-theme="ayu"></script><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="khonsu" data-themes="" data-resource-suffix="" data-rustdoc-version="1.89.0-nightly (8405332bd 2025-05-12)" data-channel="nightly" data-search-js="search-f7877310.js" data-settings-js="settings-5514c975.js" ><script src="../../static.files/storage-4e99c027.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-7ef8a74a.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-32bb7600.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-6580c154.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="mobile-topbar"><button class="sidebar-menu-toggle" title="show sidebar"></button><a class="logo-container" href="../../khonsu/index.html"><img src="https://github.com/psila-ai/khonsu/raw/master/art/khonsu.jpg" alt=""></a></nav><nav class="sidebar"><div class="sidebar-crate"><a class="logo-container" href="../../khonsu/index.html"><img src="https://github.com/psila-ai/khonsu/raw/master/art/khonsu.jpg" alt="logo"></a><h2><a href="../../khonsu/index.html">khonsu</a><span class="version">0.1.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module distributed</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#feature-flag" title="Feature Flag">Feature Flag</a></li><li><a href="#example-setting-up-a-distributed-khonsu-cluster" title="Example: Setting up a distributed Khonsu cluster">Example: Setting up a distributed Khonsu cluster</a></li><li><a href="#example-performing-a-distributed-transaction" title="Example: Performing a distributed transaction">Example: Performing a distributed transaction</a></li><li><a href="#distributed-transaction-system" title="Distributed Transaction System">Distributed Transaction System</a><ul><li><a href="#architecture" title="Architecture">Architecture</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#crash-recovery" title="Crash Recovery">Crash Recovery</a></li><li><a href="#limitations" title="Limitations">Limitations</a></li></ul></li></ul><h3><a href="#modules-1">Module Items</a></h3><ul class="block"><li><a href="#modules-1" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate khonsu</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><rustdoc-search></rustdoc-search><section id="main-content" class="content"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">khonsu</a></div><h1>Module <span>distributed</span><button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/khonsu/distributed/mod.rs.html#1-369">Source</a> </span></div><span class="item-info"><div class="stab portability">Available on <strong>crate feature <code>distributed</code></strong> only.</div></span><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>2PC Mechanism &amp; Distributed Commit Integration</p>
+<p>This module provides distributed transaction capabilities using a Two-Phase Commit (2PC) protocol
+over a multi paxos consensus algorithm. It enables transactions to span multiple nodes while
+maintaining ACID properties across the distributed system.</p>
+<h2 id="feature-flag"><a class="doc-anchor" href="#feature-flag">§</a>Feature Flag</h2>
+<p>This module is only available when the <code>distributed</code> feature is enabled:</p>
+<div class="example-wrap"><pre class="language-toml"><code>[dependencies]
+khonsu = { git = &quot;https://github.com/psila-ai/khonsu.git&quot;, features = [&quot;distributed&quot;] }</code></pre></div><h2 id="example-setting-up-a-distributed-khonsu-cluster"><a class="doc-anchor" href="#example-setting-up-a-distributed-khonsu-cluster">§</a>Example: Setting up a distributed Khonsu cluster</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// Create a cluster configuration
+</span><span class="kw">let </span>node_id = <span class="number">1</span>;
+<span class="kw">let </span>cluster_config = ClusterConfig {
+    configuration_id: <span class="number">1</span>,
+    nodes: <span class="macro">vec!</span>[<span class="number">1</span>, <span class="number">2</span>, <span class="number">3</span>], <span class="comment">// A 3-node cluster
+    </span>flexible_quorum: <span class="prelude-val">None</span>,
+};
+
+<span class="comment">// Define peer addresses for gRPC communication
+</span><span class="kw">let </span><span class="kw-2">mut </span>peer_addrs = HashMap::new();
+peer_addrs.insert(<span class="number">2</span>, <span class="string">"127.0.0.1:50052"</span>.to_string());
+peer_addrs.insert(<span class="number">3</span>, <span class="string">"127.0.0.1:50053"</span>.to_string());
+
+<span class="comment">// Create a storage path for the distributed commit log
+</span><span class="kw">let </span>storage_path = std::path::PathBuf::from(<span class="string">"/tmp/khonsu-node1"</span>);
+
+<span class="comment">// Create a distributed configuration
+</span><span class="kw">let </span>dist_config = KhonsuDistConfig {
+    node_id,
+    cluster_config,
+    peer_addrs,
+    storage_path,
+};
+
+<span class="comment">// Create a Khonsu instance with distributed capabilities
+</span><span class="kw">let </span>storage = Arc::new(MockStorage);
+<span class="kw">let </span>khonsu = Khonsu::new(
+    storage,
+    TransactionIsolation::ReadCommitted, <span class="comment">// Only ReadCommitted is fully supported in distributed mode
+    </span>ConflictResolution::Fail,
+    <span class="prelude-val">Some</span>(dist_config), <span class="comment">// Pass the distributed configuration
+</span>);
+
+<span class="comment">// Now you can use khonsu for distributed transactions</span></code></pre></div>
+<h2 id="example-performing-a-distributed-transaction"><a class="doc-anchor" href="#example-performing-a-distributed-transaction">§</a>Example: Performing a distributed transaction</h2>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="comment">// Start a transaction
+</span><span class="kw">let </span><span class="kw-2">mut </span>txn = khonsu.start_transaction();
+
+<span class="comment">// Create some data
+</span><span class="kw">let </span>schema = Arc::new(Schema::new(<span class="macro">vec!</span>[
+    Field::new(<span class="string">"value"</span>, DataType::Int32, <span class="bool-val">false</span>),
+]));
+<span class="kw">let </span>array = Int32Array::from(<span class="macro">vec!</span>[<span class="number">100</span>]);
+<span class="kw">let </span>record_batch = RecordBatch::try_new(
+    schema,
+    <span class="macro">vec!</span>[Arc::new(array)],
+).unwrap();
+
+<span class="comment">// Write data that will be replicated to all nodes
+</span>txn.write(<span class="string">"distributed_key"</span>.to_string(), record_batch).unwrap();
+
+<span class="comment">// Commit the transaction - this will be replicated to all nodes in the cluster
+</span><span class="kw">match </span>txn.commit() {
+    <span class="prelude-val">Ok</span>(<span class="kw">_</span>) =&gt; <span class="macro">println!</span>(<span class="string">"Transaction committed and replicated to all nodes"</span>),
+    <span class="prelude-val">Err</span>(e) =&gt; <span class="macro">println!</span>(<span class="string">"Transaction failed: {:?}"</span>, e),
+}</code></pre></div>
+<h2 id="distributed-transaction-system"><a class="doc-anchor" href="#distributed-transaction-system">§</a>Distributed Transaction System</h2>
+<p>This module contains the distributed commit implementation using a Two-Phase Commit (2PC) protocol
+over a multi paxos consensus algorithm. It enables transactions to span multiple nodes while
+maintaining ACID properties across the distributed system.</p>
+<h3 id="architecture"><a class="doc-anchor" href="#architecture">§</a>Architecture</h3>
+<p>The distributed system consists of several components:</p>
+<ul>
+<li><strong>DistributedCommitManager</strong>: Coordinates the distributed commit process</li>
+<li><strong>Two-Phase Commit (2PC)</strong>: Ensures atomicity across nodes</li>
+<li><strong>Multi Paxos Consensus</strong>: Provides fault tolerance and consistency</li>
+<li><strong>gRPC Communication</strong>: Enables network communication between nodes</li>
+<li><strong>RocksDB Storage</strong>: Provides durability for the commit log</li>
+</ul>
+<h3 id="modules"><a class="doc-anchor" href="#modules">§</a>Modules</h3>
+<ul>
+<li><code>channel_ext</code>: Extensions for communication channels with node identification</li>
+<li><code>dist_config</code>: Configuration structures for distributed operation</li>
+<li><code>grpc_server</code>: gRPC server implementation for inter-node communication</li>
+<li><code>manager</code>: Implementation of the DistributedCommitManager</li>
+<li><code>network</code>: Network communication layer for consensus messages</li>
+<li><code>storage</code>: Persistent storage implementation for the commit log</li>
+<li><code>twopc</code>: Two-Phase Commit protocol implementation</li>
+</ul>
+<h3 id="crash-recovery"><a class="doc-anchor" href="#crash-recovery">§</a>Crash Recovery</h3>
+<p>The system is designed to be crash-resistant. When a node crashes and restarts:</p>
+<ol>
+<li>It recovers its state from the persistent storage</li>
+<li>It rejoins the cluster and catches up on missed transactions</li>
+<li>It participates in new distributed transactions</li>
+</ol>
+<h3 id="limitations"><a class="doc-anchor" href="#limitations">§</a>Limitations</h3>
+<ul>
+<li>Only Read Committed isolation is fully supported in distributed mode</li>
+<li>Repeatable Read and Serializable isolation have limitations in distributed settings</li>
+</ul>
+</div></details><h2 id="modules-1" class="section-header">Modules<a href="#modules-1" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="channel_ext/index.html" title="mod khonsu::distributed::channel_ext">channel_<wbr>ext</a></dt><dd>Extensions for communication channels with node identification</dd><dt><a class="mod" href="dist_config/index.html" title="mod khonsu::distributed::dist_config">dist_<wbr>config</a></dt><dd>Configuration structures for distributed operation</dd><dt><a class="mod" href="grpc_server/index.html" title="mod khonsu::distributed::grpc_server">grpc_<wbr>server</a></dt><dd>gRPC server implementation for inter-node communication</dd><dt><a class="mod" href="manager/index.html" title="mod khonsu::distributed::manager">manager</a></dt><dd>Distributed Commit Manager</dd><dt><a class="mod" href="network/index.html" title="mod khonsu::distributed::network">network</a></dt><dd>Network communication layer for consensus messages</dd><dt><a class="mod" href="paxos_service/index.html" title="mod khonsu::distributed::paxos_service">paxos_<wbr>service</a></dt><dd>Multi Paxos Service</dd><dt><a class="mod" href="prelude/index.html" title="mod khonsu::distributed::prelude">prelude</a></dt><dd>Prelude of the distributed commits.</dd><dt><a class="mod" href="storage/index.html" title="mod khonsu::distributed::storage">storage</a></dt><dd>Persistent storage implementation for the commit log</dd><dt><a class="mod" href="twopc/index.html" title="mod khonsu::distributed::twopc">twopc</a></dt><dd>Two-Phase Commit (2PC) protocol implementation over Multi Paxos.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.GlobalTransactionId.html" title="struct khonsu::distributed::GlobalTransactionId">Global<wbr>Transaction<wbr>Id</a></dt><dd>Represents a globally unique transaction identifier.</dd><dt><a class="struct" href="struct.ReplicatedCommit.html" title="struct khonsu::distributed::ReplicatedCommit">Replicated<wbr>Commit</a></dt><dd>Represents a transaction commit that is replicated through OmniPaxos.</dd><dt><a class="struct" href="struct.ReplicatedCommitSnapshot.html" title="struct khonsu::distributed::ReplicatedCommitSnapshot">Replicated<wbr>Commit<wbr>Snapshot</a></dt><dd>Snapshot for ReplicatedCommit used by OmniPaxos.</dd><dt><a class="struct" href="struct.SerializableVersionedValue.html" title="struct khonsu::distributed::SerializableVersionedValue">Serializable<wbr>Versioned<wbr>Value</a></dt><dd>A serializable wrapper for VersionedValue.</dd></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.TransactionState.html" title="enum khonsu::distributed::TransactionState">Transaction<wbr>State</a></dt><dd>Represents the state of a transaction in the two-phase commit protocol.</dd></dl></section></div></main></body></html>
